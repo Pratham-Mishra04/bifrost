@@ -28,6 +28,7 @@ const (
 	// Request context filtering takes priority over client config - context can override client exclusions.
 	MCPContextKeyIncludeClients schemas.BifrostContextKey = "mcp-include-clients" // Context key for whitelist client filtering
 	MCPContextKeyIncludeTools   schemas.BifrostContextKey = "mcp-include-tools"   // Context key for whitelist tool filtering (Note: toolName should be in "clientName-toolName" format for individual tools, or "clientName-*" for wildcard)
+	MCPContextKeyExcludeTools   schemas.BifrostContextKey = "mcp-exclude-tools"   // Context key for blocklist tool filtering (supports exact tool names, "clientName-*", and glob patterns like "*-scheduler")
 )
 
 // ============================================================================

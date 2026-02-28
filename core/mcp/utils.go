@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -449,19 +450,43 @@ func shouldSkipToolForRequest(ctx context.Context, clientName, toolName string) 
 				return true // No tools allowed
 			}
 
-			// Handle wildcard "clientName-*" - if present, all tools are included for this client
-			if slices.Contains(includeToolsList, fmt.Sprintf("%s-*", clientName)) {
-				return false // All tools allowed
+			// Include filter is allow-list based: tool must match either client wildcard
+			// or fully-qualified tool name, otherwise it is skipped.
+			included := slices.Contains(includeToolsList, fmt.Sprintf("%s-*", clientName)) ||
+				slices.Contains(includeToolsList, toolName)
+			if !included {
+				return true
 			}
+		}
+	}
 
-			// Check if specific tool is in the list (format: clientName-toolName)
-			// Note: toolName is already prefixed when coming from ToolMap, so use it directly
-			if slices.Contains(includeToolsList, toolName) {
-				return false // Tool is explicitly allowed
+	// Exclude filter is deny-list based and runs after include filtering.
+	// It can remove tools that were otherwise allowed by include rules.
+	excludeTools := ctx.Value(MCPContextKeyExcludeTools)
+	if excludeTools != nil {
+		if excludeToolsList, ok := excludeTools.([]string); ok {
+			unprefixedToolName := stripClientPrefix(toolName, clientName)
+			for _, blocked := range excludeToolsList {
+				pattern := strings.TrimSpace(blocked)
+				if pattern == "" {
+					continue
+				}
+
+				if pattern == "*" ||
+					pattern == toolName ||
+					pattern == unprefixedToolName ||
+					pattern == fmt.Sprintf("%s-*", clientName) {
+					return true
+				}
+
+				// Support lightweight glob patterns (for example "*-scheduler").
+				if matched, err := path.Match(pattern, toolName); err == nil && matched {
+					return true
+				}
+				if matched, err := path.Match(pattern, unprefixedToolName); err == nil && matched {
+					return true
+				}
 			}
-
-			// If includeTools is specified but this tool is not in it, skip it
-			return true
 		}
 	}
 

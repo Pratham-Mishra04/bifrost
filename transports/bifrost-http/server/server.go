@@ -4,8 +4,8 @@ package server
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"os/signal"
@@ -121,11 +121,6 @@ type BifrostHTTPServer struct {
 
 	AuthMiddleware    *handlers.AuthMiddleware
 	TracingMiddleware *handlers.TracingMiddleware
-
-	// ExternalInferenceMiddlewares allows external code to inject middlewares
-	// into the inference route chain. These run as the outermost layer
-	// (before tracing, auth, etc.) on all inference endpoints.
-	ExternalInferenceMiddlewares []schemas.BifrostHTTPMiddleware
 }
 
 var logger schemas.Logger
@@ -1165,6 +1160,10 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context, r *router.Router) err
 		s.AsyncJobCleaner = logstore.NewAsyncJobCleaner(s.Config.LogsStore, logger)
 		s.AsyncJobCleaner.StartCleanupRoutine()
 	}
+	// mnemo: always enforce governance + virtual key auth (this repo is exclusive to mnemo)
+	s.Config.ClientConfig.EnableGovernance = true
+	s.Config.ClientConfig.EnforceAuthOnInference = true
+
 	// Load all plugins
 	if err := s.LoadPlugins(ctx); err != nil {
 		return fmt.Errorf("failed to instantiate plugins: %v", err)
@@ -1283,10 +1282,6 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context, r *router.Router) err
 	}
 	// Registering inference middlewares
 	inferenceMiddlewares = append([]schemas.BifrostHTTPMiddleware{handlers.TransportInterceptorMiddleware(s.Config)}, inferenceMiddlewares...)
-	// Inject external inference middlewares (outermost layer)
-	if len(s.ExternalInferenceMiddlewares) > 0 {
-		inferenceMiddlewares = append(s.ExternalInferenceMiddlewares, inferenceMiddlewares...)
-	}
 	// Curating observability plugins
 	observabilityPlugins := s.CollectObservabilityPlugins()
 	// This enables the central streaming accumulator for both use cases

@@ -264,32 +264,36 @@ func Init(ctx context.Context, config schemas.BifrostConfig) (*Bifrost, error) {
 	}
 
 	// Initialize MCP manager if configured
-	if config.MCPConfig != nil {
-		bifrost.mcpInitOnce.Do(func() {
-			// Set up plugin pipeline provider functions for executeCode tool hooks
-			mcpConfig := *config.MCPConfig
-			mcpConfig.PluginPipelineProvider = func() interface{} {
-				return bifrost.getPluginPipeline()
+	bifrost.mcpInitOnce.Do(func() {
+		// Set up plugin pipeline provider functions for executeCode tool hooks
+		var mcpConfig schemas.MCPConfig
+		if config.MCPConfig != nil {
+			mcpConfig = *config.MCPConfig
+		} else {
+			mcpConfig = schemas.MCPConfig{
+				ClientConfigs: []*schemas.MCPClientConfig{},
 			}
-			mcpConfig.ReleasePluginPipeline = func(pipeline interface{}) {
-				if pp, ok := pipeline.(*PluginPipeline); ok {
-					bifrost.releasePluginPipeline(pp)
-				}
+		}
+		mcpConfig.PluginPipelineProvider = func() interface{} {
+			return bifrost.getPluginPipeline()
+		}
+		mcpConfig.ReleasePluginPipeline = func(pipeline interface{}) {
+			if pp, ok := pipeline.(*PluginPipeline); ok {
+				bifrost.releasePluginPipeline(pp)
 			}
-			// Create Starlark CodeMode for code execution
-			var codeModeConfig *mcp.CodeModeConfig
-			if mcpConfig.ToolManagerConfig != nil {
-				codeModeConfig = &mcp.CodeModeConfig{
-					BindingLevel:         mcpConfig.ToolManagerConfig.CodeModeBindingLevel,
-					ToolExecutionTimeout: mcpConfig.ToolManagerConfig.ToolExecutionTimeout,
-				}
+		}
+		// Create Starlark CodeMode for code execution
+		var codeModeConfig *mcp.CodeModeConfig
+		if mcpConfig.ToolManagerConfig != nil {
+			codeModeConfig = &mcp.CodeModeConfig{
+				BindingLevel:         mcpConfig.ToolManagerConfig.CodeModeBindingLevel,
+				ToolExecutionTimeout: mcpConfig.ToolManagerConfig.ToolExecutionTimeout,
 			}
-			codeMode := starlark.NewStarlarkCodeMode(codeModeConfig, bifrost.logger)
-			bifrost.MCPManager = mcp.NewMCPManager(bifrostCtx, mcpConfig, bifrost.oauth2Provider, bifrost.logger, codeMode)
-			bifrost.logger.Info("MCP integration initialized successfully")
-		})
-	}
-
+		}
+		codeMode := starlark.NewStarlarkCodeMode(codeModeConfig, bifrost.logger)
+		bifrost.MCPManager = mcp.NewMCPManager(bifrostCtx, mcpConfig, bifrost.oauth2Provider, bifrost.logger, codeMode)
+		bifrost.logger.Info("MCP integration initialized successfully")
+	})
 	// Create buffered channels for each provider and start workers
 	for _, providerKey := range providerKeys {
 		if strings.TrimSpace(string(providerKey)) == "" {
@@ -3173,24 +3177,6 @@ func (bifrost *Bifrost) getProviderMutex(providerKey schemas.ModelProvider) *syn
 //	        return args.Message, nil
 //	    }, toolSchema)
 func (bifrost *Bifrost) RegisterMCPTool(name, description string, handler func(ctx context.Context, args any) (string, error), toolSchema schemas.ChatTool) error {
-	if bifrost.MCPManager == nil {
-		// Lazily initialize MCP manager (same pattern as AddMCPClient)
-		bifrost.mcpInitOnce.Do(func() {
-			mcpConfig := schemas.MCPConfig{
-				ClientConfigs: []*schemas.MCPClientConfig{},
-			}
-			mcpConfig.PluginPipelineProvider = func() interface{} {
-				return bifrost.getPluginPipeline()
-			}
-			mcpConfig.ReleasePluginPipeline = func(pipeline interface{}) {
-				if pp, ok := pipeline.(*PluginPipeline); ok {
-					bifrost.releasePluginPipeline(pp)
-				}
-			}
-			codeMode := starlark.NewStarlarkCodeMode(nil, bifrost.logger)
-			bifrost.MCPManager = mcp.NewMCPManager(bifrost.ctx, mcpConfig, bifrost.oauth2Provider, bifrost.logger, codeMode)
-		})
-	}
 
 	if bifrost.MCPManager == nil {
 		return fmt.Errorf("failed to initialize MCP manager")
