@@ -2676,6 +2676,74 @@ func (bifrost *Bifrost) removeLLMPlugin(name string) error {
 	}
 }
 
+// InsertLLMPluginAtPosition inserts or moves an LLM plugin to a specific position in the plugin chain.
+// Position 0 means the plugin will run first (before all other plugins).
+// If the plugin already exists, it will be moved to the new position.
+// If position is negative or greater than the current plugin count, the plugin is appended.
+//
+// Parameters:
+//   - plugin: The LLM plugin to insert
+//   - position: The target position (0-based index). If negative or too large, appends to end.
+//
+// Returns:
+//   - error: Any error that occurred during insertion
+//
+// Example:
+//
+//	// Insert plugin to run first
+//	err := bifrost.InsertLLMPluginAtPosition(myPlugin, 0)
+//	// Insert plugin at position 2 (third in chain)
+//	err := bifrost.InsertLLMPluginAtPosition(anotherPlugin, 2)
+func (bifrost *Bifrost) InsertLLMPluginAtPosition(plugin schemas.LLMPlugin, position int) error {
+	for {
+		oldPlugins := bifrost.llmPlugins.Load()
+
+		// Create new slice with replaced or new plugin
+		var newPlugins []schemas.LLMPlugin
+		var pluginToCleanup schemas.LLMPlugin
+		found := false
+
+		if oldPlugins == nil {
+			newPlugins = make([]schemas.LLMPlugin, 0)
+		} else {
+			newPlugins = make([]schemas.LLMPlugin, 0, len(*oldPlugins))
+			// Find if plugin already exists and copy others
+			for _, p := range *oldPlugins {
+				if p.GetName() == plugin.GetName() {
+					pluginToCleanup = p
+					found = true
+				} else {
+					newPlugins = append(newPlugins, p)
+				}
+			}
+		}
+
+		// Determine insertion position
+		insertPos := position
+		if insertPos < 0 || insertPos > len(newPlugins) {
+			// Append to end if position is invalid
+			insertPos = len(newPlugins)
+		}
+
+		// Insert the plugin at the specified position
+		newPlugins = append(newPlugins[:insertPos], append([]schemas.LLMPlugin{plugin}, newPlugins[insertPos:]...)...)
+
+		// Atomic compare-and-swap
+		if bifrost.llmPlugins.CompareAndSwap(oldPlugins, &newPlugins) {
+			// Cleanup the old plugin if it was replaced
+			if found && pluginToCleanup != nil {
+				err := pluginToCleanup.Cleanup()
+				if err != nil {
+					bifrost.logger.Warn("failed to cleanup old LLM plugin %s: %v", pluginToCleanup.GetName(), err)
+				}
+			}
+			bifrost.logger.Info("inserted LLM plugin %s at position %d", plugin.GetName(), insertPos)
+			return nil
+		}
+		// Retrying as swapping did not work
+	}
+}
+
 // removeMCPPlugin removes an MCP plugin from the server.
 func (bifrost *Bifrost) removeMCPPlugin(name string) error {
 	for {
@@ -2710,6 +2778,108 @@ func (bifrost *Bifrost) removeMCPPlugin(name string) error {
 		}
 		// Retrying as swapping did not work
 	}
+}
+
+// InsertMCPPluginAtPosition inserts or moves an MCP plugin to a specific position in the plugin chain.
+// Position 0 means the plugin will run first (before all other plugins).
+// If the plugin already exists, it will be moved to the new position.
+// If position is negative or greater than the current plugin count, the plugin is appended.
+//
+// Parameters:
+//   - plugin: The MCP plugin to insert
+//   - position: The target position (0-based index). If negative or too large, appends to end.
+//
+// Returns:
+//   - error: Any error that occurred during insertion
+//
+// Example:
+//
+//	// Insert plugin to run first
+//	err := bifrost.InsertMCPPluginAtPosition(myPlugin, 0)
+//	// Insert plugin at position 2 (third in chain)
+//	err := bifrost.InsertMCPPluginAtPosition(anotherPlugin, 2)
+func (bifrost *Bifrost) InsertMCPPluginAtPosition(plugin schemas.MCPPlugin, position int) error {
+	for {
+		oldPlugins := bifrost.mcpPlugins.Load()
+
+		// Create new slice with replaced or new plugin
+		var newPlugins []schemas.MCPPlugin
+		var pluginToCleanup schemas.MCPPlugin
+		found := false
+
+		if oldPlugins == nil {
+			newPlugins = make([]schemas.MCPPlugin, 0)
+		} else {
+			newPlugins = make([]schemas.MCPPlugin, 0, len(*oldPlugins))
+			// Find if plugin already exists and copy others
+			for _, p := range *oldPlugins {
+				if p.GetName() == plugin.GetName() {
+					pluginToCleanup = p
+					found = true
+				} else {
+					newPlugins = append(newPlugins, p)
+				}
+			}
+		}
+
+		// Determine insertion position
+		insertPos := position
+		if insertPos < 0 || insertPos > len(newPlugins) {
+			// Append to end if position is invalid
+			insertPos = len(newPlugins)
+		}
+
+		// Insert the plugin at the specified position
+		newPlugins = append(newPlugins[:insertPos], append([]schemas.MCPPlugin{plugin}, newPlugins[insertPos:]...)...)
+
+		// Atomic compare-and-swap
+		if bifrost.mcpPlugins.CompareAndSwap(oldPlugins, &newPlugins) {
+			// Cleanup the old plugin if it was replaced
+			if found && pluginToCleanup != nil {
+				err := pluginToCleanup.Cleanup()
+				if err != nil {
+					bifrost.logger.Warn("failed to cleanup old MCP plugin %s: %v", pluginToCleanup.GetName(), err)
+				}
+			}
+			bifrost.logger.Info("inserted MCP plugin %s at position %d", plugin.GetName(), insertPos)
+			return nil
+		}
+		// Retrying as swapping did not work
+	}
+}
+
+// PrependLLMPlugin is a convenience method that inserts an LLM plugin at the beginning (position 0)
+// so it runs first in the plugin chain.
+//
+// Parameters:
+//   - plugin: The LLM plugin to prepend
+//
+// Returns:
+//   - error: Any error that occurred during insertion
+//
+// Example:
+//
+//	// Register system prompt injection plugin to run first
+//	err := bifrost.PrependLLMPlugin(promptInjectionPlugin)
+func (bifrost *Bifrost) PrependLLMPlugin(plugin schemas.LLMPlugin) error {
+	return bifrost.InsertLLMPluginAtPosition(plugin, 0)
+}
+
+// PrependMCPPlugin is a convenience method that inserts an MCP plugin at the beginning (position 0)
+// so it runs first in the plugin chain.
+//
+// Parameters:
+//   - plugin: The MCP plugin to prepend
+//
+// Returns:
+//   - error: Any error that occurred during insertion
+//
+// Example:
+//
+//	// Register MCP plugin to run first
+//	err := bifrost.PrependMCPPlugin(mcpPlugin)
+func (bifrost *Bifrost) PrependMCPPlugin(plugin schemas.MCPPlugin) error {
+	return bifrost.InsertMCPPluginAtPosition(plugin, 0)
 }
 
 // ReloadPlugin reloads a plugin with new instance
