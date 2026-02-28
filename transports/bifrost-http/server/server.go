@@ -1161,7 +1161,6 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context, r *router.Router) err
 		s.AsyncJobCleaner.StartCleanupRoutine()
 	}
 	// mnemo: always enforce governance + virtual key auth (this repo is exclusive to mnemo)
-	s.Config.ClientConfig.EnableGovernance = true
 	s.Config.ClientConfig.EnforceAuthOnInference = true
 
 	// Load all plugins
