@@ -73,13 +73,17 @@
           "description": "Number of days to retain logs",
           "default": 365
         },
-        "enable_governance": {
-          "type": "boolean",
-          "description": "Enable governance features"
-        },
         "enforce_governance_header": {
           "type": "boolean",
           "description": "Enforce governance header. This will require every incoming request to include x-bf-vk header."
+        },
+        "enforce_auth_on_inference": {
+          "type": "boolean",
+          "description": "Require auth (VK, API key, or user token) on inference endpoints"
+        },
+        "enforce_scim_auth": {
+          "type": "boolean",
+          "description": "Deprecated: use enforce_auth_on_inference"
         },
         "allow_direct_keys": {
           "type": "boolean",
@@ -203,7 +207,7 @@
           "$ref": "#/$defs/provider"
         },
         "vllm": {
-          "$ref": "#/$defs/provider"
+          "$ref": "#/$defs/provider_with_vllm_config"
         },
         "huggingface": {
           "$ref": "#/$defs/provider"
@@ -708,7 +712,7 @@
                     "description": "Database host"
                   },
                   "port": {
-                    "type": "integer",
+                    "type": "string",
                     "description": "Database port"
                   },
                   "user": {
@@ -1001,11 +1005,10 @@
                     },
                     "keys": {
                       "type": "array",
-                      "description": "API keys for the embedding provider",
+                      "description": "API keys for the embedding provider (required for semantic caching, not needed for direct caching with dimension: 1)",
                       "items": {
                         "type": "string"
-                      },
-                      "minItems": 1
+                      }
                     },
                     "embedding_model": {
                       "type": "string",
@@ -1040,8 +1043,12 @@
                     },
                     "dimension": {
                       "type": "integer",
-                      "description": "Dimension for vector store embeddings",
+                      "description": "Dimension for vector store embeddings. Use 1 for direct (hash-based) caching without an embedding provider.",
                       "minimum": 1
+                    },
+                    "default_cache_key": {
+                      "type": "string",
+                      "description": "Default cache key used when no per-request key is provided. When set, all requests without an explicit x-bf-cache-key header will use this value and be cached automatically."
                     },
                     "conversation_history_threshold": {
                       "type": "integer",
@@ -1442,84 +1449,76 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              "vllm_key_config": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "VLLM server base URL (can use env. prefix)"
+                  },
+                  "model_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Exact model name served on this VLLM instance"
+                  }
+                },
+                "required": [
+                  "url",
+                  "model_name"
+                ],
+                "additionalProperties": false
               }
             },
             "oneOf": [
               {
                 "not": {
                   "anyOf": [
-                    {
-                      "required": [
-                        "azure_key_config"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "vertex_key_config"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "bedrock_key_config"
-                      ]
-                    }
+                    { "required": ["azure_key_config"] },
+                    { "required": ["vertex_key_config"] },
+                    { "required": ["bedrock_key_config"] },
+                    { "required": ["vllm_key_config"] }
                   ]
                 }
               },
               {
-                "required": [
-                  "azure_key_config"
-                ],
+                "required": ["azure_key_config"],
                 "not": {
                   "anyOf": [
-                    {
-                      "required": [
-                        "vertex_key_config"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "bedrock_key_config"
-                      ]
-                    }
+                    { "required": ["vertex_key_config"] },
+                    { "required": ["bedrock_key_config"] },
+                    { "required": ["vllm_key_config"] }
                   ]
                 }
               },
               {
-                "required": [
-                  "vertex_key_config"
-                ],
+                "required": ["vertex_key_config"],
                 "not": {
                   "anyOf": [
-                    {
-                      "required": [
-                        "azure_key_config"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "bedrock_key_config"
-                      ]
-                    }
+                    { "required": ["azure_key_config"] },
+                    { "required": ["bedrock_key_config"] },
+                    { "required": ["vllm_key_config"] }
                   ]
                 }
               },
               {
-                "required": [
-                  "bedrock_key_config"
-                ],
+                "required": ["bedrock_key_config"],
                 "not": {
                   "anyOf": [
-                    {
-                      "required": [
-                        "azure_key_config"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "vertex_key_config"
-                      ]
-                    }
+                    { "required": ["azure_key_config"] },
+                    { "required": ["vertex_key_config"] },
+                    { "required": ["vllm_key_config"] }
+                  ]
+                }
+              },
+              {
+                "required": ["vllm_key_config"],
+                "not": {
+                  "anyOf": [
+                    { "required": ["azure_key_config"] },
+                    { "required": ["vertex_key_config"] },
+                    { "required": ["bedrock_key_config"] }
                   ]
                 }
               }
@@ -1607,6 +1606,82 @@
           "minimum": 3600
         }
       },
+      "additionalProperties": false
+    },
+    "pricing_override_match_type": {
+      "type": "string",
+      "enum": [
+        "exact",
+        "wildcard",
+        "regex"
+      ]
+    },
+    "pricing_override_request_type": {
+      "type": "string",
+      "enum": [
+        "text_completion",
+        "text_completion_stream",
+        "chat_completion",
+        "chat_completion_stream",
+        "responses",
+        "responses_stream",
+        "embedding",
+        "rerank",
+        "speech",
+        "speech_stream",
+        "transcription",
+        "transcription_stream",
+        "image_generation",
+        "image_generation_stream"
+      ]
+    },
+    "provider_pricing_override": {
+      "type": "object",
+      "properties": {
+        "model_pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "match_type": {
+          "$ref": "#/$defs/pricing_override_match_type"
+        },
+        "request_types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pricing_override_request_type"
+          }
+        },
+        "input_cost_per_token": { "type": "number", "minimum": 0 },
+        "output_cost_per_token": { "type": "number", "minimum": 0 },
+        "input_cost_per_video_per_second": { "type": "number", "minimum": 0 },
+        "input_cost_per_audio_per_second": { "type": "number", "minimum": 0 },
+        "input_cost_per_character": { "type": "number", "minimum": 0 },
+        "output_cost_per_character": { "type": "number", "minimum": 0 },
+        "input_cost_per_token_above_128k_tokens": { "type": "number", "minimum": 0 },
+        "input_cost_per_character_above_128k_tokens": { "type": "number", "minimum": 0 },
+        "input_cost_per_image_above_128k_tokens": { "type": "number", "minimum": 0 },
+        "input_cost_per_video_per_second_above_128k_tokens": { "type": "number", "minimum": 0 },
+        "input_cost_per_audio_per_second_above_128k_tokens": { "type": "number", "minimum": 0 },
+        "output_cost_per_token_above_128k_tokens": { "type": "number", "minimum": 0 },
+        "output_cost_per_character_above_128k_tokens": { "type": "number", "minimum": 0 },
+        "input_cost_per_token_above_200k_tokens": { "type": "number", "minimum": 0 },
+        "output_cost_per_token_above_200k_tokens": { "type": "number", "minimum": 0 },
+        "cache_creation_input_token_cost_above_200k_tokens": { "type": "number", "minimum": 0 },
+        "cache_read_input_token_cost_above_200k_tokens": { "type": "number", "minimum": 0 },
+        "cache_read_input_token_cost": { "type": "number", "minimum": 0 },
+        "cache_creation_input_token_cost": { "type": "number", "minimum": 0 },
+        "input_cost_per_token_batches": { "type": "number", "minimum": 0 },
+        "output_cost_per_token_batches": { "type": "number", "minimum": 0 },
+        "input_cost_per_image_token": { "type": "number", "minimum": 0 },
+        "output_cost_per_image_token": { "type": "number", "minimum": 0 },
+        "input_cost_per_image": { "type": "number", "minimum": 0 },
+        "output_cost_per_image": { "type": "number", "minimum": 0 },
+        "cache_read_input_image_token_cost": { "type": "number", "minimum": 0 }
+      },
+      "required": [
+        "model_pattern",
+        "match_type"
+      ],
       "additionalProperties": false
     },
     "network_config": {
@@ -1753,6 +1828,41 @@
         }
       ]
     },
+    "vllm_key": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base_key"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "vllm_key_config": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "VLLM server base URL (can use env. prefix)"
+                },
+                "model_name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Exact model name served on this VLLM instance"
+                }
+              },
+              "required": [
+                "url",
+                "model_name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "vllm_key_config"
+          ]
+        }
+      ]
+    },
     "azure_key": {
       "allOf": [
         {
@@ -1853,6 +1963,13 @@
         "send_back_raw_response": {
           "type": "boolean",
           "description": "Include raw response in BifrostResponse (default: false)"
+        },
+        "pricing_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provider_pricing_override"
+          },
+          "description": "Provider-level pricing overrides matched by model pattern"
         }
       },
       "required": [
@@ -1883,6 +2000,50 @@
         "send_back_raw_response": {
           "type": "boolean",
           "description": "Include raw response in BifrostResponse (default: false)"
+        },
+        "pricing_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provider_pricing_override"
+          },
+          "description": "Provider-level pricing overrides matched by model pattern"
+        }
+      },
+      "required": [
+        "keys"
+      ],
+      "additionalProperties": false
+    },
+    "provider_with_vllm_config": {
+      "type": "object",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/vllm_key"
+          },
+          "minItems": 1,
+          "description": "API keys for this provider"
+        },
+        "network_config": {
+          "$ref": "#/$defs/network_config"
+        },
+        "concurrency_and_buffer_size": {
+          "$ref": "#/$defs/concurrency_config"
+        },
+        "proxy_config": {
+          "$ref": "#/$defs/proxy_config"
+        },
+        "send_back_raw_response": {
+          "type": "boolean",
+          "description": "Include raw response in BifrostResponse (default: false)"
+        },
+        "pricing_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provider_pricing_override"
+          },
+          "description": "Provider-level pricing overrides matched by model pattern"
         }
       },
       "required": [
@@ -1913,6 +2074,13 @@
         "send_back_raw_response": {
           "type": "boolean",
           "description": "Include raw response in BifrostResponse (default: false)"
+        },
+        "pricing_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provider_pricing_override"
+          },
+          "description": "Provider-level pricing overrides matched by model pattern"
         }
       },
       "required": [
@@ -1943,6 +2111,13 @@
         "send_back_raw_response": {
           "type": "boolean",
           "description": "Include raw response in BifrostResponse (default: false)"
+        },
+        "pricing_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provider_pricing_override"
+          },
+          "description": "Provider-level pricing overrides matched by model pattern"
         }
       },
       "required": [

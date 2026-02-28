@@ -597,7 +597,7 @@ func (provider *BedrockProvider) listModelsByKey(ctx *schemas.BifrostContext, ke
 	}
 
 	// Convert to Bifrost response
-	response := bedrockResponse.ToBifrostListModelsResponse(providerName, key.Models, config.Deployments)
+	response := bedrockResponse.ToBifrostListModelsResponse(providerName, key.Models, config.Deployments, request.Unfiltered)
 	if response == nil {
 		return nil, providerUtils.NewBifrostOperationError("failed to convert Bedrock model list response", nil, providerName)
 	}
@@ -1900,6 +1900,36 @@ func (provider *BedrockProvider) ImageVariation(ctx *schemas.BifrostContext, key
 	}
 
 	return bifrostResponse, nil
+}
+
+// VideoGeneration is not supported by the Bedrock provider.
+func (provider *BedrockProvider) VideoGeneration(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoGenerationRequest) (*schemas.BifrostVideoGenerationResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoGenerationRequest, provider.GetProviderKey())
+}
+
+// VideoRetrieve is not supported by the Bedrock provider.
+func (provider *BedrockProvider) VideoRetrieve(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoRetrieveRequest) (*schemas.BifrostVideoGenerationResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoRetrieveRequest, provider.GetProviderKey())
+}
+
+// VideoDownload is not supported by the Bedrock provider.
+func (provider *BedrockProvider) VideoDownload(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoDownloadRequest) (*schemas.BifrostVideoDownloadResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoDownloadRequest, provider.GetProviderKey())
+}
+
+// VideoDelete is not supported by Bedrock provider.
+func (provider *BedrockProvider) VideoDelete(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoDeleteRequest) (*schemas.BifrostVideoDeleteResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoDeleteRequest, provider.GetProviderKey())
+}
+
+// VideoList is not supported by Bedrock provider.
+func (provider *BedrockProvider) VideoList(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoListRequest) (*schemas.BifrostVideoListResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoListRequest, provider.GetProviderKey())
+}
+
+// VideoRemix is not supported by Bedrock provider.
+func (provider *BedrockProvider) VideoRemix(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoRemixRequest) (*schemas.BifrostVideoGenerationResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoRemixRequest, provider.GetProviderKey())
 }
 
 // FileUpload uploads a file to S3 for Bedrock batch processing.
@@ -3351,8 +3381,72 @@ func resolveBedrockDeployment(model string, key schemas.Key) string {
 	return deployment
 }
 
-func (provider *BedrockProvider) CountTokens(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostResponsesRequest) (*schemas.BifrostCountTokensResponse, *schemas.BifrostError) {
-	return nil, providerUtils.NewUnsupportedOperationError(schemas.CountTokensRequest, provider.GetProviderKey())
+func (provider *BedrockProvider) CountTokens(ctx *schemas.BifrostContext, key schemas.Key, request *schemas.BifrostResponsesRequest) (*schemas.BifrostCountTokensResponse, *schemas.BifrostError) {
+	if err := providerUtils.CheckOperationAllowed(schemas.Bedrock, provider.customProviderConfig, schemas.CountTokensRequest); err != nil {
+		return nil, err
+	}
+
+	providerName := provider.GetProviderKey()
+
+	if key.BedrockKeyConfig == nil {
+		return nil, providerUtils.NewConfigurationError("bedrock key config is not provided", providerName)
+	}
+
+	// Convert to Bedrock Converse format using the existing responses converter
+	converseReq, convErr := ToBedrockResponsesRequest(ctx, request)
+	if convErr != nil {
+		return nil, providerUtils.NewBifrostOperationError(schemas.ErrProviderRequestMarshal, convErr, providerName)
+	}
+
+	// Wrap in the CountTokens request envelope
+	countTokensReq := &BedrockCountTokensRequest{}
+	countTokensReq.Input.Converse = converseReq
+
+	jsonData, err := sonic.Marshal(countTokensReq)
+	if err != nil {
+		return nil, providerUtils.NewBifrostOperationError(schemas.ErrProviderRequestMarshal, err, providerName)
+	}
+
+	// Format the path with proper model identifier
+	path, deployment := provider.getModelPath("count-tokens", request.Model, key)
+
+	// Send the request
+	responseBody, latency, bifrostErr := provider.completeRequest(ctx, jsonData, path, key)
+	if bifrostErr != nil {
+		return nil, providerUtils.EnrichError(ctx, bifrostErr, jsonData, responseBody, provider.sendBackRawRequest, provider.sendBackRawResponse)
+	}
+
+	// Parse the response
+	bedrockResponse := &BedrockCountTokensResponse{}
+	rawRequest, rawResponse, bifrostErr := providerUtils.HandleProviderResponse(
+		responseBody,
+		bedrockResponse,
+		jsonData,
+		providerUtils.ShouldSendBackRawRequest(ctx, provider.sendBackRawRequest),
+		providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse),
+	)
+	if bifrostErr != nil {
+		return nil, providerUtils.EnrichError(ctx, bifrostErr, jsonData, responseBody, provider.sendBackRawRequest, provider.sendBackRawResponse)
+	}
+
+	// Convert to Bifrost format
+	response := bedrockResponse.ToBifrostCountTokensResponse(deployment)
+
+	response.ExtraFields.Provider = providerName
+	response.ExtraFields.RequestType = schemas.CountTokensRequest
+	response.ExtraFields.ModelRequested = request.Model
+	response.ExtraFields.ModelDeployment = deployment
+	response.ExtraFields.Latency = latency.Milliseconds()
+
+	if providerUtils.ShouldSendBackRawRequest(ctx, provider.sendBackRawRequest) {
+		response.ExtraFields.RawRequest = rawRequest
+	}
+
+	if providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse) {
+		response.ExtraFields.RawResponse = rawResponse
+	}
+
+	return response, nil
 }
 
 // ContainerCreate is not supported by the Bedrock provider.

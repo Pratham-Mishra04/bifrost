@@ -34,6 +34,9 @@ type BifrostListModelsRequest struct {
 	// PageToken: Token received from previous request to retrieve next page
 	PageToken string `json:"page_token"`
 
+	// Unfiltered: If true, the response will include all models for the provider, regardless of the allowed models (internal bifrost use only, not sent to the provider)
+	Unfiltered bool `json:"-"`
+
 	// ExtraParams: Additional provider-specific query parameters
 	// This allows for flexibility to pass any custom parameters that specific providers might support
 	ExtraParams map[string]interface{} `json:"-"`
@@ -44,8 +47,8 @@ type BifrostListModelsResponse struct {
 	ExtraFields   BifrostResponseExtraFields `json:"extra_fields"`
 	NextPageToken string                     `json:"next_page_token,omitempty"` // Token to retrieve next page
 
-	// Key-level status tracking for multi-key providers, internal field
-	KeyStatuses []KeyStatus `json:"-"`
+	// Key-level status tracking for multi-key providers
+	KeyStatuses []KeyStatus `json:"key_statuses,omitempty"`
 
 	// Anthropic specific fields
 	FirstID *string `json:"-"`
@@ -82,6 +85,7 @@ func (response *BifrostListModelsResponse) ApplyPagination(pageSize int, pageTok
 			Data:          []Model{},
 			ExtraFields:   response.ExtraFields,
 			NextPageToken: "",
+			KeyStatuses:   response.KeyStatuses,
 		}
 	}
 
@@ -95,6 +99,7 @@ func (response *BifrostListModelsResponse) ApplyPagination(pageSize int, pageTok
 	paginatedResponse := &BifrostListModelsResponse{
 		Data:        paginatedData,
 		ExtraFields: response.ExtraFields,
+		KeyStatuses: response.KeyStatuses,
 	}
 
 	if endIndex < totalItems {

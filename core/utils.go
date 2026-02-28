@@ -72,7 +72,7 @@ var dynamicallyConfigurableProviders = []schemas.ModelProvider{
 
 // isModelRequired returns true if the request type requires a model
 func isModelRequired(reqType schemas.RequestType) bool {
-	return reqType == schemas.TextCompletionRequest || reqType == schemas.TextCompletionStreamRequest || reqType == schemas.ChatCompletionRequest || reqType == schemas.ChatCompletionStreamRequest || reqType == schemas.ResponsesRequest || reqType == schemas.ResponsesStreamRequest || reqType == schemas.SpeechRequest || reqType == schemas.SpeechStreamRequest || reqType == schemas.TranscriptionRequest || reqType == schemas.TranscriptionStreamRequest || reqType == schemas.EmbeddingRequest || reqType == schemas.ImageGenerationRequest || reqType == schemas.ImageGenerationStreamRequest
+	return reqType == schemas.TextCompletionRequest || reqType == schemas.TextCompletionStreamRequest || reqType == schemas.ChatCompletionRequest || reqType == schemas.ChatCompletionStreamRequest || reqType == schemas.ResponsesRequest || reqType == schemas.ResponsesStreamRequest || reqType == schemas.SpeechRequest || reqType == schemas.SpeechStreamRequest || reqType == schemas.TranscriptionRequest || reqType == schemas.TranscriptionStreamRequest || reqType == schemas.EmbeddingRequest || reqType == schemas.ImageGenerationRequest || reqType == schemas.ImageGenerationStreamRequest || reqType == schemas.VideoGenerationRequest
 }
 
 // Ptr returns a pointer to the given value.
@@ -87,13 +87,13 @@ func providerRequiresKey(providerKey schemas.ModelProvider, customConfig *schema
 	if customConfig != nil && customConfig.IsKeyLess && customConfig.BaseProviderType != schemas.Bedrock {
 		return false
 	}
-	return providerKey != schemas.Ollama && providerKey != schemas.SGL && providerKey != schemas.VLLM
+	return !IsKeylessProvider(providerKey)
 }
 
 // canProviderKeyValueBeEmpty returns true if the given provider allows the API key to be empty.
 // Some providers like Vertex and Bedrock have their credentials in additional key configs..
 func canProviderKeyValueBeEmpty(providerKey schemas.ModelProvider) bool {
-	return providerKey == schemas.Vertex || providerKey == schemas.Bedrock
+	return providerKey == schemas.Vertex || providerKey == schemas.Bedrock || providerKey == schemas.VLLM
 }
 
 // hasAzureEntraIDCredentials checks if an Azure key has Entra ID (Service Principal) credentials configured.
@@ -230,6 +230,11 @@ func IsStandardProvider(providerKey schemas.ModelProvider) bool {
 	return ok
 }
 
+// IsKeylessProvider reports whether providerKey is a keyless provider.
+func IsKeylessProvider(providerKey schemas.ModelProvider) bool {
+	return providerKey == schemas.Ollama || providerKey == schemas.SGL
+}
+
 // IsStreamRequestType returns true if the given request type is a stream request.
 func IsStreamRequestType(reqType schemas.RequestType) bool {
 	return reqType == schemas.TextCompletionStreamRequest || reqType == schemas.ChatCompletionStreamRequest || reqType == schemas.ResponsesStreamRequest || reqType == schemas.SpeechStreamRequest || reqType == schemas.TranscriptionStreamRequest || reqType == schemas.ImageGenerationStreamRequest || reqType == schemas.ImageEditStreamRequest
@@ -264,6 +269,17 @@ func isContainerRequestType(reqType schemas.RequestType) bool {
 		reqType == schemas.ContainerFileCreateRequest || reqType == schemas.ContainerFileListRequest ||
 		reqType == schemas.ContainerFileRetrieveRequest || reqType == schemas.ContainerFileContentRequest ||
 		reqType == schemas.ContainerFileDeleteRequest
+}
+
+// isModellessVideoRequestType returns true if the given request type is a video request that does not require a model.
+func isModellessVideoRequestType(reqType schemas.RequestType) bool {
+	switch reqType {
+	case schemas.VideoRetrieveRequest, schemas.VideoDownloadRequest, schemas.VideoListRequest,
+		schemas.VideoDeleteRequest, schemas.VideoRemixRequest:
+		return true
+	default:
+		return false
+	}
 }
 
 // IsFinalChunk returns true if the given context is a final chunk.

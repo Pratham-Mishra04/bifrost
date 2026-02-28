@@ -522,7 +522,7 @@ VALUES ('migration-test-lock', 'holder-migration-test-001', $future, $now)
 ON CONFLICT DO NOTHING;
 
 -- config_client (global client configuration)
-INSERT INTO config_client (id, drop_excess_requests, prometheus_labels_json, allowed_origins_json, allowed_headers_json, header_filter_config_json, initial_pool_size, enable_logging, disable_content_logging, disable_db_pings_in_health, log_retention_days, enable_governance, enforce_governance_header, allow_direct_keys, max_request_body_size_mb, mcp_agent_depth, mcp_tool_execution_timeout, mcp_code_mode_binding_level, mcp_tool_sync_interval, enable_litellm_fallbacks, config_hash, created_at, updated_at)
+INSERT INTO config_client (id, drop_excess_requests, prometheus_labels_json, allowed_origins_json, allowed_headers_json, header_filter_config_json, initial_pool_size, enable_logging, disable_content_logging, disable_db_pings_in_health, log_retention_days, enforce_governance_header, allow_direct_keys, max_request_body_size_mb, mcp_agent_depth, mcp_tool_execution_timeout, mcp_code_mode_binding_level, mcp_tool_sync_interval, enable_litellm_fallbacks, config_hash, created_at, updated_at)
 VALUES (1, false, '["provider", "model"]', '["*"]', '["Authorization"]', '{}', 300, true, false, false, 365, true, false, true, 100, 10, 30, 'server', 10, false, 'client-config-hash-001', $now, $now)
 ON CONFLICT DO NOTHING;
 
@@ -549,6 +549,7 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- migrations (migration tracking table - used by gorp migrator)
+-- NOTE: sequence and status are added dynamically via append_dynamic_inserts() for schema compatibility
 INSERT INTO migrations (id, applied_at)
 VALUES ('migration-test-001', $now)
 ON CONFLICT DO NOTHING;
@@ -678,16 +679,21 @@ append_dynamic_mcp_clients_insert() {
   local config_db="${3:-}"  # Only used for SQLite
 
   local now
+  local future
   local past
   if [ "$db_type" = "postgres" ]; then
     now="NOW()"
+    future="NOW() + INTERVAL '1 hour'"
     past="NOW() - INTERVAL '1 day'"
     generate_mcp_clients_insert_postgres "$now" "$faker_sql"
+    generate_async_jobs_insert_postgres "$now" "$future" "$faker_sql"
     append_dynamic_columns_postgres "$now" "$past" "$faker_sql"
   else
     now="datetime('now')"
+    future="datetime('now', '+1 hour')"
     past="datetime('now', '-1 day')"
     generate_mcp_clients_insert_sqlite "$now" "$faker_sql" "$config_db"
+    generate_async_jobs_insert_sqlite "$now" "$future" "$faker_sql"
     append_dynamic_columns_sqlite "$now" "$past" "$faker_sql" "$config_db"
   fi
 }
@@ -718,6 +724,222 @@ append_dynamic_columns_postgres() {
   if column_exists_postgres "logs" "routing_engine_used"; then
     echo "UPDATE logs SET routing_engine_used = 'routing-rule' WHERE id = 'log-migration-test-001';" >> "$output_file"
     echo "UPDATE logs SET routing_engine_used = 'loadbalancing' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+
+  # config_keys.status (added in v1.4.7)
+  if column_exists_postgres "config_keys" "status"; then
+    echo "UPDATE config_keys SET status = 'active' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET status = 'unknown' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_keys.description (added in v1.4.7)
+  if column_exists_postgres "config_keys" "description"; then
+    echo "UPDATE config_keys SET description = 'Migration test key for OpenAI' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET description = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_providers.status (added in v1.4.7)
+  if column_exists_postgres "config_providers" "status"; then
+    echo "UPDATE config_providers SET status = 'active' WHERE name = 'openai';" >> "$output_file"
+    echo "UPDATE config_providers SET status = 'unknown' WHERE name = 'anthropic';" >> "$output_file"
+  fi
+
+  # config_providers.description (added in v1.4.7)
+  if column_exists_postgres "config_providers" "description"; then
+    echo "UPDATE config_providers SET description = 'Migration test OpenAI provider' WHERE name = 'openai';" >> "$output_file"
+    echo "UPDATE config_providers SET description = '' WHERE name = 'anthropic';" >> "$output_file"
+  fi
+
+  # logs.routing_engines_used (renamed from routing_engine_used in v1.4.7)
+  if column_exists_postgres "logs" "routing_engines_used"; then
+    echo "UPDATE logs SET routing_engines_used = 'routing-rule' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET routing_engines_used = 'loadbalancing' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+
+  # logs.list_models_output (added in v1.4.7)
+  if column_exists_postgres "logs" "list_models_output"; then
+    echo "UPDATE logs SET list_models_output = '[{\"id\":\"gpt-4\",\"object\":\"model\"}]' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET list_models_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+
+  # logs.routing_engine_logs (added in v1.4.7)
+  if column_exists_postgres "logs" "routing_engine_logs"; then
+    echo "UPDATE logs SET routing_engine_logs = 'Route matched: gpt-4 -> openai' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET routing_engine_logs = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # Dropped columns - columns that existed in older versions but were removed
+  # -------------------------------------------------------------------------
+
+  # config_client.enable_governance (dropped in v1.4.8)
+  if column_exists_postgres "config_client" "enable_governance"; then
+    echo "UPDATE config_client SET enable_governance = true WHERE id = 1;" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.8 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  # migrations.sequence, migrations.status (added with updated migrator in v1.4.8)
+  if column_exists_postgres "migrations" "sequence"; then
+    echo "UPDATE migrations SET sequence = 1 WHERE id = 'migration-test-001';" >> "$output_file"
+  fi
+  if column_exists_postgres "migrations" "status"; then
+    echo "UPDATE migrations SET status = 'success' WHERE id = 'migration-test-001';" >> "$output_file"
+  fi
+
+  # config_keys.vllm_url, vllm_model_name (added in v1.4.8)
+  if column_exists_postgres "config_keys" "vllm_url"; then
+    echo "UPDATE config_keys SET vllm_url = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET vllm_url = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+  if column_exists_postgres "config_keys" "vllm_model_name"; then
+    echo "UPDATE config_keys SET vllm_model_name = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET vllm_model_name = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_keys.encryption_status (added in v1.4.8)
+  if column_exists_postgres "config_keys" "encryption_status"; then
+    echo "UPDATE config_keys SET encryption_status = 'plain_text' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+    echo "UPDATE config_keys SET encryption_status = 'plain_text' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+  fi
+
+  # config_providers.pricing_overrides_json, encryption_status (added in v1.4.8)
+  if column_exists_postgres "config_providers" "pricing_overrides_json"; then
+    echo "UPDATE config_providers SET pricing_overrides_json = NULL WHERE name = 'openai';" >> "$output_file"
+    echo "UPDATE config_providers SET pricing_overrides_json = NULL WHERE name = 'anthropic';" >> "$output_file"
+  fi
+  if column_exists_postgres "config_providers" "encryption_status"; then
+    echo "UPDATE config_providers SET encryption_status = 'plain_text' WHERE name = 'openai';" >> "$output_file"
+    echo "UPDATE config_providers SET encryption_status = 'plain_text' WHERE name = 'anthropic';" >> "$output_file"
+  fi
+
+  # config_plugins.encryption_status (added in v1.4.8)
+  if column_exists_postgres "config_plugins" "encryption_status"; then
+    echo "UPDATE config_plugins SET encryption_status = 'plain_text' WHERE name = 'migration-test-plugin';" >> "$output_file"
+  fi
+
+  # config_vector_store.encryption_status (added in v1.4.8)
+  if column_exists_postgres "config_vector_store" "encryption_status"; then
+    echo "UPDATE config_vector_store SET encryption_status = 'plain_text' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # governance_virtual_keys.encryption_status, value_hash (added in v1.4.8)
+  # value_hash uses NULL to avoid unique constraint violations (multiple empty strings would violate unique index)
+  if column_exists_postgres "governance_virtual_keys" "encryption_status"; then
+    echo "UPDATE governance_virtual_keys SET encryption_status = 'plain_text' WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET encryption_status = 'plain_text' WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_virtual_keys" "value_hash"; then
+    echo "UPDATE governance_virtual_keys SET value_hash = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+    echo "UPDATE governance_virtual_keys SET value_hash = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+  fi
+
+  # sessions.encryption_status, token_hash (added in v1.4.8)
+  # token_hash uses NULL to avoid unique constraint violations
+  if column_exists_postgres "sessions" "encryption_status"; then
+    echo "UPDATE sessions SET encryption_status = 'plain_text' WHERE token = 'session-migration-token-fake-123';" >> "$output_file"
+    echo "UPDATE sessions SET encryption_status = 'plain_text' WHERE token = 'session-migration-token-fake-456';" >> "$output_file"
+  fi
+  if column_exists_postgres "sessions" "token_hash"; then
+    echo "UPDATE sessions SET token_hash = NULL WHERE token = 'session-migration-token-fake-123';" >> "$output_file"
+    echo "UPDATE sessions SET token_hash = NULL WHERE token = 'session-migration-token-fake-456';" >> "$output_file"
+  fi
+
+  # oauth_configs.encryption_status (added in v1.4.8)
+  if column_exists_postgres "oauth_configs" "encryption_status"; then
+    echo "UPDATE oauth_configs SET encryption_status = 'plain_text' WHERE id = 'oauth-config-migration-test-001';" >> "$output_file"
+    echo "UPDATE oauth_configs SET encryption_status = 'plain_text' WHERE id = 'oauth-config-migration-test-002';" >> "$output_file"
+  fi
+
+  # oauth_tokens.encryption_status (added in v1.4.8)
+  if column_exists_postgres "oauth_tokens" "encryption_status"; then
+    echo "UPDATE oauth_tokens SET encryption_status = 'plain_text' WHERE id = 'oauth-token-migration-test-001';" >> "$output_file"
+    echo "UPDATE oauth_tokens SET encryption_status = 'plain_text' WHERE id = 'oauth-token-migration-test-002';" >> "$output_file"
+  fi
+
+  # governance_model_pricing.output_cost_per_video_per_second, output_cost_per_second (added in v1.4.8)
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_video_per_second"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_video_per_second = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_video_per_second = NULL WHERE id = 2;" >> "$output_file"
+  fi
+  if column_exists_postgres "governance_model_pricing" "output_cost_per_second"; then
+    echo "UPDATE governance_model_pricing SET output_cost_per_second = NULL WHERE id = 1;" >> "$output_file"
+    echo "UPDATE governance_model_pricing SET output_cost_per_second = NULL WHERE id = 2;" >> "$output_file"
+  fi
+
+  # config_client new columns (added in v1.4.8)
+  if column_exists_postgres "config_client" "enforce_auth_on_inference"; then
+    echo "UPDATE config_client SET enforce_auth_on_inference = false WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "enforce_scim_auth"; then
+    echo "UPDATE config_client SET enforce_scim_auth = false WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "async_job_result_ttl"; then
+    echo "UPDATE config_client SET async_job_result_ttl = 3600 WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "required_headers_json"; then
+    echo "UPDATE config_client SET required_headers_json = '[]' WHERE id = 1;" >> "$output_file"
+  fi
+  if column_exists_postgres "config_client" "logging_headers_json"; then
+    echo "UPDATE config_client SET logging_headers_json = '[]' WHERE id = 1;" >> "$output_file"
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.8 columns - log store tables
+  # -------------------------------------------------------------------------
+
+  # logs.rerank_output (added in v1.4.8)
+  if column_exists_postgres "logs" "rerank_output"; then
+    echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs video columns (added in v1.4.8)
+  if column_exists_postgres "logs" "video_generation_input"; then
+    echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "video_generation_output"; then
+    echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "video_retrieve_output"; then
+    echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "video_download_output"; then
+    echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "video_list_output"; then
+    echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+  if column_exists_postgres "logs" "video_delete_output"; then
+    echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # logs.metadata (added in v1.4.8)
+  if column_exists_postgres "logs" "metadata"; then
+    echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+    echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+    echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  fi
+
+  # mcp_tool_logs.metadata (added in v1.4.8)
+  if column_exists_postgres "mcp_tool_logs" "metadata"; then
+    echo "UPDATE mcp_tool_logs SET metadata = '' WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+    echo "UPDATE mcp_tool_logs SET metadata = '' WHERE id = 'mcp-log-migration-002';" >> "$output_file"
   fi
 }
 
@@ -750,6 +972,205 @@ append_dynamic_columns_sqlite() {
   # We always emit them - if the column doesn't exist, the UPDATE will fail silently.
   echo "UPDATE logs SET routing_engine_used = 'routing-rule' WHERE id = 'log-migration-test-001';" >> "$output_file"
   echo "UPDATE logs SET routing_engine_used = 'loadbalancing' WHERE id = 'log-migration-test-002';" >> "$output_file"
+
+  if [ -f "$config_db" ]; then
+    # config_keys.status (added in v1.4.7)
+    if column_exists_sqlite "$config_db" "config_keys" "status"; then
+      echo "UPDATE config_keys SET status = 'active' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET status = 'unknown' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_keys.description (added in v1.4.7)
+    if column_exists_sqlite "$config_db" "config_keys" "description"; then
+      echo "UPDATE config_keys SET description = 'Migration test key for OpenAI' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET description = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_providers.status (added in v1.4.7)
+    if column_exists_sqlite "$config_db" "config_providers" "status"; then
+      echo "UPDATE config_providers SET status = 'active' WHERE name = 'openai';" >> "$output_file"
+      echo "UPDATE config_providers SET status = 'unknown' WHERE name = 'anthropic';" >> "$output_file"
+    fi
+
+    # config_providers.description (added in v1.4.7)
+    if column_exists_sqlite "$config_db" "config_providers" "description"; then
+      echo "UPDATE config_providers SET description = 'Migration test OpenAI provider' WHERE name = 'openai';" >> "$output_file"
+      echo "UPDATE config_providers SET description = '' WHERE name = 'anthropic';" >> "$output_file"
+    fi
+  fi
+
+  # logs.routing_engines_used (renamed from routing_engine_used in v1.4.7)
+  # Same pattern as routing_engine_used - emitted unconditionally, fails silently on config_db
+  echo "UPDATE logs SET routing_engines_used = 'routing-rule' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET routing_engines_used = 'loadbalancing' WHERE id = 'log-migration-test-002';" >> "$output_file"
+
+  # logs.list_models_output (added in v1.4.7)
+  echo "UPDATE logs SET list_models_output = '[{\"id\":\"gpt-4\",\"object\":\"model\"}]' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET list_models_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+
+  # logs.routing_engine_logs (added in v1.4.7)
+  echo "UPDATE logs SET routing_engine_logs = 'Route matched: gpt-4 -> openai' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET routing_engine_logs = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+
+  # -------------------------------------------------------------------------
+  # Dropped columns - columns that existed in older versions but were removed
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # config_client.enable_governance (dropped in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_client" "enable_governance"; then
+      echo "UPDATE config_client SET enable_governance = true WHERE id = 1;" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.8 columns - config store tables
+  # -------------------------------------------------------------------------
+
+  if [ -f "$config_db" ]; then
+    # migrations.sequence, migrations.status (added with updated migrator in v1.4.8)
+    if column_exists_sqlite "$config_db" "migrations" "sequence"; then
+      echo "UPDATE migrations SET sequence = 1 WHERE id = 'migration-test-001';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "migrations" "status"; then
+      echo "UPDATE migrations SET status = 'success' WHERE id = 'migration-test-001';" >> "$output_file"
+    fi
+
+    # config_keys.vllm_url, vllm_model_name (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_keys" "vllm_url"; then
+      echo "UPDATE config_keys SET vllm_url = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET vllm_url = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_keys" "vllm_model_name"; then
+      echo "UPDATE config_keys SET vllm_model_name = '' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET vllm_model_name = '' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_keys.encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_keys" "encryption_status"; then
+      echo "UPDATE config_keys SET encryption_status = 'plain_text' WHERE name = 'migration-test-key-openai';" >> "$output_file"
+      echo "UPDATE config_keys SET encryption_status = 'plain_text' WHERE name = 'migration-test-key-anthropic';" >> "$output_file"
+    fi
+
+    # config_providers.pricing_overrides_json, encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_providers" "pricing_overrides_json"; then
+      echo "UPDATE config_providers SET pricing_overrides_json = NULL WHERE name = 'openai';" >> "$output_file"
+      echo "UPDATE config_providers SET pricing_overrides_json = NULL WHERE name = 'anthropic';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_providers" "encryption_status"; then
+      echo "UPDATE config_providers SET encryption_status = 'plain_text' WHERE name = 'openai';" >> "$output_file"
+      echo "UPDATE config_providers SET encryption_status = 'plain_text' WHERE name = 'anthropic';" >> "$output_file"
+    fi
+
+    # config_plugins.encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_plugins" "encryption_status"; then
+      echo "UPDATE config_plugins SET encryption_status = 'plain_text' WHERE name = 'migration-test-plugin';" >> "$output_file"
+    fi
+
+    # config_vector_store.encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_vector_store" "encryption_status"; then
+      echo "UPDATE config_vector_store SET encryption_status = 'plain_text' WHERE id = 1;" >> "$output_file"
+    fi
+
+    # governance_virtual_keys.encryption_status, value_hash (added in v1.4.8)
+    # value_hash uses NULL to avoid unique constraint violations
+    if column_exists_sqlite "$config_db" "governance_virtual_keys" "encryption_status"; then
+      echo "UPDATE governance_virtual_keys SET encryption_status = 'plain_text' WHERE id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_keys SET encryption_status = 'plain_text' WHERE id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_virtual_keys" "value_hash"; then
+      echo "UPDATE governance_virtual_keys SET value_hash = NULL WHERE id = 'vk-migration-test-1';" >> "$output_file"
+      echo "UPDATE governance_virtual_keys SET value_hash = NULL WHERE id = 'vk-migration-test-2';" >> "$output_file"
+    fi
+
+    # sessions.encryption_status, token_hash (added in v1.4.8)
+    # token_hash uses NULL to avoid unique constraint violations
+    if column_exists_sqlite "$config_db" "sessions" "encryption_status"; then
+      echo "UPDATE sessions SET encryption_status = 'plain_text' WHERE token = 'session-migration-token-fake-123';" >> "$output_file"
+      echo "UPDATE sessions SET encryption_status = 'plain_text' WHERE token = 'session-migration-token-fake-456';" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "sessions" "token_hash"; then
+      echo "UPDATE sessions SET token_hash = NULL WHERE token = 'session-migration-token-fake-123';" >> "$output_file"
+      echo "UPDATE sessions SET token_hash = NULL WHERE token = 'session-migration-token-fake-456';" >> "$output_file"
+    fi
+
+    # oauth_configs.encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "oauth_configs" "encryption_status"; then
+      echo "UPDATE oauth_configs SET encryption_status = 'plain_text' WHERE id = 'oauth-config-migration-test-001';" >> "$output_file"
+      echo "UPDATE oauth_configs SET encryption_status = 'plain_text' WHERE id = 'oauth-config-migration-test-002';" >> "$output_file"
+    fi
+
+    # oauth_tokens.encryption_status (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "oauth_tokens" "encryption_status"; then
+      echo "UPDATE oauth_tokens SET encryption_status = 'plain_text' WHERE id = 'oauth-token-migration-test-001';" >> "$output_file"
+      echo "UPDATE oauth_tokens SET encryption_status = 'plain_text' WHERE id = 'oauth-token-migration-test-002';" >> "$output_file"
+    fi
+
+    # governance_model_pricing.output_cost_per_video_per_second, output_cost_per_second (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_video_per_second"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_video_per_second = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_video_per_second = NULL WHERE id = 2;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "governance_model_pricing" "output_cost_per_second"; then
+      echo "UPDATE governance_model_pricing SET output_cost_per_second = NULL WHERE id = 1;" >> "$output_file"
+      echo "UPDATE governance_model_pricing SET output_cost_per_second = NULL WHERE id = 2;" >> "$output_file"
+    fi
+
+    # config_client new columns (added in v1.4.8)
+    if column_exists_sqlite "$config_db" "config_client" "enforce_auth_on_inference"; then
+      echo "UPDATE config_client SET enforce_auth_on_inference = 0 WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "enforce_scim_auth"; then
+      echo "UPDATE config_client SET enforce_scim_auth = 0 WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "async_job_result_ttl"; then
+      echo "UPDATE config_client SET async_job_result_ttl = 3600 WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "required_headers_json"; then
+      echo "UPDATE config_client SET required_headers_json = '[]' WHERE id = 1;" >> "$output_file"
+    fi
+    if column_exists_sqlite "$config_db" "config_client" "logging_headers_json"; then
+      echo "UPDATE config_client SET logging_headers_json = '[]' WHERE id = 1;" >> "$output_file"
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
+  # v1.4.8 columns - log store tables (emitted unconditionally; fail silently on config_db)
+  # -------------------------------------------------------------------------
+
+  # logs.rerank_output (added in v1.4.8)
+  echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET rerank_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs video columns (added in v1.4.8)
+  echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_generation_input = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_generation_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_retrieve_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_download_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_list_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+  echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET video_delete_output = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # logs.metadata (added in v1.4.8)
+  echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-001';" >> "$output_file"
+  echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-002';" >> "$output_file"
+  echo "UPDATE logs SET metadata = '' WHERE id = 'log-migration-test-003';" >> "$output_file"
+
+  # mcp_tool_logs.metadata (added in v1.4.8)
+  echo "UPDATE mcp_tool_logs SET metadata = '' WHERE id = 'mcp-log-migration-001';" >> "$output_file"
+  echo "UPDATE mcp_tool_logs SET metadata = '' WHERE id = 'mcp-log-migration-002';" >> "$output_file"
 }
 
 # ============================================================================
@@ -828,6 +1249,12 @@ generate_mcp_clients_insert_postgres() {
   if column_exists_postgres "config_mcp_clients" "oauth_config_id"; then
     cols="$cols, oauth_config_id"
     vals="$vals, 'oauth-config-migration-test-001'"
+  fi
+
+  # config_mcp_clients.encryption_status (added in v1.4.8)
+  if column_exists_postgres "config_mcp_clients" "encryption_status"; then
+    cols="$cols, encryption_status"
+    vals="$vals, 'plain_text'"
   fi
   
   # Append the dynamic INSERT to the output file
@@ -1037,11 +1464,47 @@ generate_mcp_clients_insert_sqlite() {
     cols="$cols, oauth_config_id"
     vals="$vals, 'oauth-config-migration-test-001'"
   fi
+
+  # config_mcp_clients.encryption_status (added in v1.4.8)
+  if column_exists_sqlite "$config_db" "config_mcp_clients" "encryption_status"; then
+    cols="$cols, encryption_status"
+    vals="$vals, 'plain_text'"
+  fi
   
   # Append the dynamic INSERT to the output file
   echo "" >> "$output_file"
   echo "-- config_mcp_clients (MCP server configurations - dynamically generated based on schema)" >> "$output_file"
   echo "INSERT INTO config_mcp_clients ($cols) VALUES ($vals) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate async_jobs INSERT based on schema existence for PostgreSQL
+# The async_jobs table was added in v1.4.8; only emit the INSERT if the table exists.
+generate_async_jobs_insert_postgres() {
+  local now="$1"
+  local future="$2"
+  local output_file="$3"
+
+  # Use column_exists_postgres on a known column as a table-existence check
+  if ! column_exists_postgres "async_jobs" "id"; then
+    return
+  fi
+
+  echo "" >> "$output_file"
+  echo "-- async_jobs (async job tracking table - added in v1.4.8, dynamically generated based on schema)" >> "$output_file"
+  echo "INSERT INTO async_jobs (id, status, request_type, response, status_code, error, virtual_key_id, result_ttl, expires_at, created_at, completed_at) VALUES ('async-job-migration-test-001', 'completed', 'chat_completion', '{\"id\":\"resp-async-001\"}', 200, '', 'vk-migration-test-1', 3600, $future, $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
+}
+
+# Generate async_jobs INSERT for SQLite
+# async_jobs lives in the logs_db. The faker SQL is run against both config_db and logs_db,
+# so this INSERT will fail silently on config_db (table doesn't exist) and succeed on logs_db.
+generate_async_jobs_insert_sqlite() {
+  local now="$1"
+  local future="$2"
+  local output_file="$3"
+
+  echo "" >> "$output_file"
+  echo "-- async_jobs (async job tracking table - added in v1.4.8)" >> "$output_file"
+  echo "INSERT INTO async_jobs (id, status, request_type, response, status_code, error, virtual_key_id, result_ttl, expires_at, created_at, completed_at) VALUES ('async-job-migration-test-001', 'completed', 'chat_completion', '{\"id\":\"resp-async-001\"}', 200, '', 'vk-migration-test-1', 3600, $future, $now, $now) ON CONFLICT DO NOTHING;" >> "$output_file"
 }
 
 # Validate faker column coverage for SQLite
@@ -1307,6 +1770,10 @@ compare_postgres_snapshots() {
     # routing_engine_used -> routing_engines_used (v1.4.7)
     local renamed_columns="routing_engine_used"
     
+    # Columns that are intentionally dropped during migration should be excluded
+    # enable_governance (dropped in v1.4.8)
+    local dropped_columns="enable_governance"
+    
     local before_col_array
     IFS=',' read -ra before_col_array <<< "$before_columns"
     
@@ -1314,6 +1781,10 @@ compare_postgres_snapshots() {
     for col in "${before_col_array[@]}"; do
       # Skip columns that are intentionally renamed during migration
       if [[ " $renamed_columns " == *" $col "* ]]; then
+        continue
+      fi
+      # Skip columns that are intentionally dropped during migration
+      if [[ " $dropped_columns " == *" $col "* ]]; then
         continue
       fi
       if [[ ! ",$after_columns," == *",$col,"* ]]; then

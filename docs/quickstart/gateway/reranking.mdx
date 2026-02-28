@@ -6,6 +6,13 @@ icon: "book-open-cover"
 
 Use reranking to sort documents by relevance for search, retrieval, and context selection.
 
+## Provider Model Examples
+
+- Cohere: `cohere/rerank-v3.5`
+- vLLM: `vllm/BAAI/bge-reranker-v2-m3`
+- Bedrock: `bedrock/<rerank-model-or-arn>`
+- Vertex AI: `vertex/<ranking-model>`
+
 ## Basic Request
 
 ```bash
@@ -46,10 +53,14 @@ curl --location 'http://localhost:8080/v1/rerank' \
   "documents": [
     {"id": "a", "text": "Bifrost supports observability plugins like OTEL and Maxim."},
     {"id": "b", "text": "Bifrost can run in Kubernetes and ECS."},
-    {"id": "c", "text": "Token counting is available at /v1/count_tokens."}
+    {"id": "c", "text": "Token counting is available at /v1/responses/input_tokens."}
   ]
 }'
 ```
+
+## vLLM Endpoint Compatibility
+
+When using a `vllm/...` model, Bifrost sends rerank requests to `/v1/rerank` first and automatically retries `/rerank` when the upstream endpoint responds with `404`, `405`, or `501`.
 
 ## Response Shape
 
@@ -69,7 +80,7 @@ curl --location 'http://localhost:8080/v1/rerank' \
       "relevance_score": 0.63,
       "document": {
         "id": "c",
-        "text": "Token counting is available at /v1/count_tokens."
+        "text": "Token counting is available at /v1/responses/input_tokens."
       }
     }
   ],

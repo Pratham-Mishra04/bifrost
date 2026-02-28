@@ -1,2 +1,1 @@
-- feat: added support for capturing configured logging headers and x-bf-lh-* prefixed headers into log metadata for both LLM and MCP requests
-- feat: add metadata column to logging table for async request tracking
+- fix: added missing count tokens support for usage field

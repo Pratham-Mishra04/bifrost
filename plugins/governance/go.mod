@@ -8,8 +8,8 @@ require (
 	github.com/bytedance/sonic v1.15.0
 	github.com/google/cel-go v0.26.1
 	github.com/google/uuid v1.6.0
-	github.com/maximhq/bifrost/core v1.4.3
-	github.com/maximhq/bifrost/framework v1.2.21
+	github.com/maximhq/bifrost/core v1.4.4
+	github.com/maximhq/bifrost/framework v1.2.23
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -120,7 +120,7 @@ require (
 	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/oauth2 v0.34.0 // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect

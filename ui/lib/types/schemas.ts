@@ -153,6 +153,14 @@ export const replicateKeyConfigSchema = z.object({
 	deployments: z.union([z.record(z.string(), z.string()), z.string()]).optional(),
 });
 
+// VLLM key config schema
+export const vllmKeyConfigSchema = z.object({
+	url: envVarSchema.refine((v) => !!v.value?.trim() || !!v.env_var?.trim(), {
+		message: "Server URL is required",
+	}),
+	model_name: z.string().trim().min(1, "Model name is required"),
+});
+
 // Model provider key schema
 export const modelProviderKeySchema = z
 	.object({
@@ -184,12 +192,13 @@ export const modelProviderKeySchema = z
 		vertex_key_config: vertexKeyConfigSchema.optional(),
 		bedrock_key_config: bedrockKeyConfigSchema.optional(),
 		replicate_key_config: replicateKeyConfigSchema.optional(),
+		vllm_key_config: vllmKeyConfigSchema.optional(),
 		use_for_batch_api: z.boolean().optional(),
 	})
 	.refine(
 		(data) => {
-			// If bedrock_key_config or azure_key_config is present, value is not required
-			if (data.bedrock_key_config || data.azure_key_config || data.vertex_key_config) {
+			// If bedrock_key_config, azure_key_config, vertex_key_config, or vllm_key_config is present, value is not required
+			if (data.bedrock_key_config || data.azure_key_config || data.vertex_key_config || data.vllm_key_config) {
 				return true;
 			}
 			// Otherwise, value is required
@@ -356,6 +365,13 @@ export const allowedRequestsSchema = z.object({
 	image_edit: z.boolean(),
 	image_edit_stream: z.boolean(),
 	image_variation: z.boolean(),
+	rerank: z.boolean(),
+	video_generation: z.boolean(),
+	video_retrieve: z.boolean(),
+	video_download: z.boolean(),
+	video_delete: z.boolean(),
+	video_list: z.boolean(),
+	video_remix: z.boolean(),
 	count_tokens: z.boolean(),
 	list_models: z.boolean(),
 });
@@ -401,6 +417,86 @@ export const formCustomProviderConfigSchema = z
 			path: ["is_key_less"],
 		},
 	);
+
+export const providerPricingOverrideMatchTypeSchema = z.enum(["exact", "wildcard", "regex"]);
+
+export const providerPricingOverrideRequestTypeSchema = z.enum([
+	"text_completion",
+	"text_completion_stream",
+	"chat_completion",
+	"chat_completion_stream",
+	"responses",
+	"responses_stream",
+	"embedding",
+	"rerank",
+	"speech",
+	"speech_stream",
+	"transcription",
+	"transcription_stream",
+	"image_generation",
+	"image_generation_stream",
+]);
+
+export const providerPricingOverrideSchema = z
+	.object({
+		model_pattern: z.string().min(1, "Model pattern is required"),
+		match_type: providerPricingOverrideMatchTypeSchema,
+		request_types: z.array(providerPricingOverrideRequestTypeSchema).optional(),
+		input_cost_per_token: z.number().min(0).optional(),
+		output_cost_per_token: z.number().min(0).optional(),
+		input_cost_per_video_per_second: z.number().min(0).optional(),
+		input_cost_per_audio_per_second: z.number().min(0).optional(),
+		input_cost_per_character: z.number().min(0).optional(),
+		output_cost_per_character: z.number().min(0).optional(),
+		input_cost_per_token_above_128k_tokens: z.number().min(0).optional(),
+		input_cost_per_character_above_128k_tokens: z.number().min(0).optional(),
+		input_cost_per_image_above_128k_tokens: z.number().min(0).optional(),
+		input_cost_per_video_per_second_above_128k_tokens: z.number().min(0).optional(),
+		input_cost_per_audio_per_second_above_128k_tokens: z.number().min(0).optional(),
+		output_cost_per_token_above_128k_tokens: z.number().min(0).optional(),
+		output_cost_per_character_above_128k_tokens: z.number().min(0).optional(),
+		input_cost_per_token_above_200k_tokens: z.number().min(0).optional(),
+		output_cost_per_token_above_200k_tokens: z.number().min(0).optional(),
+		cache_creation_input_token_cost_above_200k_tokens: z.number().min(0).optional(),
+		cache_read_input_token_cost_above_200k_tokens: z.number().min(0).optional(),
+		cache_read_input_token_cost: z.number().min(0).optional(),
+		cache_creation_input_token_cost: z.number().min(0).optional(),
+		input_cost_per_token_batches: z.number().min(0).optional(),
+		output_cost_per_token_batches: z.number().min(0).optional(),
+		input_cost_per_image_token: z.number().min(0).optional(),
+		output_cost_per_image_token: z.number().min(0).optional(),
+		input_cost_per_image: z.number().min(0).optional(),
+		output_cost_per_image: z.number().min(0).optional(),
+		cache_read_input_image_token_cost: z.number().min(0).optional(),
+	})
+	.superRefine((data, ctx) => {
+		if (data.match_type === "exact" && data.model_pattern.includes("*")) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["model_pattern"],
+				message: "Exact match patterns cannot include '*'",
+			});
+		}
+		if (data.match_type === "wildcard" && !data.model_pattern.includes("*")) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["model_pattern"],
+				message: "Wildcard patterns must include '*'",
+			});
+		}
+		if (data.match_type === "regex") {
+			try {
+				new RegExp(data.model_pattern);
+			} catch {
+				ctx.addIssue({
+					code: "custom",
+					path: ["model_pattern"],
+					message: "Invalid regex pattern",
+				});
+			}
+		}
+	});
+
 // Full model provider config schema
 export const modelProviderConfigSchema = z.object({
 	keys: z.array(modelProviderKeySchema).min(1, "At least one key is required"),
@@ -410,6 +506,7 @@ export const modelProviderConfigSchema = z.object({
 	send_back_raw_request: z.boolean().optional(),
 	send_back_raw_response: z.boolean().optional(),
 	custom_provider_config: customProviderConfigSchema.optional(),
+	pricing_overrides: z.array(providerPricingOverrideSchema).optional(),
 });
 
 // Model provider schema
@@ -426,6 +523,7 @@ export const formModelProviderConfigSchema = z.object({
 	send_back_raw_request: z.boolean().optional(),
 	send_back_raw_response: z.boolean().optional(),
 	custom_provider_config: formCustomProviderConfigSchema.optional(),
+	pricing_overrides: z.array(providerPricingOverrideSchema).optional(),
 });
 
 // Flexible model provider schema for form data - allows any string for name
@@ -443,6 +541,7 @@ export const addProviderRequestSchema = z.object({
 	send_back_raw_request: z.boolean().optional(),
 	send_back_raw_response: z.boolean().optional(),
 	custom_provider_config: customProviderConfigSchema.optional(),
+	pricing_overrides: z.array(providerPricingOverrideSchema).optional(),
 });
 
 // Update provider request schema
@@ -454,6 +553,7 @@ export const updateProviderRequestSchema = z.object({
 	send_back_raw_request: z.boolean().optional(),
 	send_back_raw_response: z.boolean().optional(),
 	custom_provider_config: customProviderConfigSchema.optional(),
+	pricing_overrides: z.array(providerPricingOverrideSchema).optional(),
 });
 
 // Cache config schema
@@ -478,7 +578,6 @@ export const coreConfigSchema = z.object({
 	prometheus_labels: z.array(z.string()).default([]),
 	enable_logging: z.boolean().default(true),
 	disable_content_logging: z.boolean().default(false),
-	enable_governance: z.boolean().default(false),
 	enforce_auth_on_inference: z.boolean().default(false),
 	allow_direct_keys: z.boolean().default(false),
 	allowed_origins: z.array(z.string()).default(["*"]),
@@ -512,7 +611,7 @@ export const networkOnlyFormSchema = z.object({
 	network_config: networkFormConfigSchema.optional(),
 });
 
-// Performance form schema for the PerformanceFormFragment
+// Performance form schema for the PerformanceFormFragment (concurrency/buffer only; raw request/response are in Debugging tab)
 export const performanceFormSchema = z.object({
 	concurrency_and_buffer_size: z
 		.object({
@@ -529,9 +628,15 @@ export const performanceFormSchema = z.object({
 			message: "Concurrency must be less than or equal to buffer size",
 			path: ["concurrency"],
 		}),
+});
+
+// Debugging tab (raw request/response toggles)
+export const debuggingFormSchema = z.object({
 	send_back_raw_request: z.boolean(),
 	send_back_raw_response: z.boolean(),
 });
+
+export type DebuggingFormSchema = z.infer<typeof debuggingFormSchema>;
 
 // OTEL Configuration Schema
 export const otelConfigSchema = z

@@ -3,8 +3,8 @@ module github.com/maximhq/bifrost/plugins/maxim
 go 1.26
 
 require (
-	github.com/maximhq/bifrost/core v1.4.3
-	github.com/maximhq/bifrost/framework v1.2.21
+	github.com/maximhq/bifrost/core v1.4.4
+	github.com/maximhq/bifrost/framework v1.2.23
 	github.com/maximhq/maxim-go v0.1.14
 )
 
@@ -115,7 +115,7 @@ require (
 	golang.org/x/arch v0.23.0 // indirect
 	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/oauth2 v0.34.0 // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect

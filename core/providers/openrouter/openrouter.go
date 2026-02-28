@@ -4,6 +4,7 @@ package openrouter
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -103,8 +104,38 @@ func (provider *OpenRouterProvider) listModelsByKey(ctx *schemas.BifrostContext,
 		return nil, bifrostErr
 	}
 
-	for i := range openrouterResponse.Data {
-		openrouterResponse.Data[i].ID = string(schemas.OpenRouter) + "/" + openrouterResponse.Data[i].ID
+	// Filter by key.Models
+	allowedModels := key.Models
+	providerPrefix := string(schemas.OpenRouter) + "/"
+
+	if !request.Unfiltered && len(allowedModels) > 0 {
+		filteredData := make([]schemas.Model, 0, len(openrouterResponse.Data))
+		includedModels := make(map[string]bool)
+		for i := range openrouterResponse.Data {
+			rawID := openrouterResponse.Data[i].ID
+			if !(slices.Contains(allowedModels, rawID) || slices.Contains(allowedModels, providerPrefix+rawID)) {
+				continue
+			}
+			openrouterResponse.Data[i].ID = providerPrefix + rawID
+			filteredData = append(filteredData, openrouterResponse.Data[i])
+			includedModels[rawID] = true
+		}
+		// Backfill allowed models not in the API response
+		for _, allowedModel := range allowedModels {
+			rawID := strings.TrimPrefix(allowedModel, providerPrefix)
+			if !includedModels[rawID] {
+				filteredData = append(filteredData, schemas.Model{
+					ID:   providerPrefix + rawID,
+					Name: schemas.Ptr(rawID),
+				})
+				includedModels[rawID] = true // avoid duplicate backfill
+			}
+		}
+		openrouterResponse.Data = filteredData
+	} else {
+		for i := range openrouterResponse.Data {
+			openrouterResponse.Data[i].ID = providerPrefix + openrouterResponse.Data[i].ID
+		}
 	}
 
 	openrouterResponse.ExtraFields.Latency = latency.Milliseconds()
@@ -324,6 +355,36 @@ func (provider *OpenRouterProvider) ImageEditStream(ctx *schemas.BifrostContext,
 // ImageVariation is not supported by the OpenRouter provider.
 func (provider *OpenRouterProvider) ImageVariation(ctx *schemas.BifrostContext, key schemas.Key, request *schemas.BifrostImageVariationRequest) (*schemas.BifrostImageGenerationResponse, *schemas.BifrostError) {
 	return nil, providerUtils.NewUnsupportedOperationError(schemas.ImageVariationRequest, provider.GetProviderKey())
+}
+
+// VideoGeneration is not supported by the OpenRouter provider.
+func (provider *OpenRouterProvider) VideoGeneration(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoGenerationRequest) (*schemas.BifrostVideoGenerationResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoGenerationRequest, provider.GetProviderKey())
+}
+
+// VideoRetrieve is not supported by the OpenRouter provider.
+func (provider *OpenRouterProvider) VideoRetrieve(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoRetrieveRequest) (*schemas.BifrostVideoGenerationResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoRetrieveRequest, provider.GetProviderKey())
+}
+
+// VideoDownload is not supported by the OpenRouter provider.
+func (provider *OpenRouterProvider) VideoDownload(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoDownloadRequest) (*schemas.BifrostVideoDownloadResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoDownloadRequest, provider.GetProviderKey())
+}
+
+// VideoDelete is not supported by OpenRouter provider.
+func (provider *OpenRouterProvider) VideoDelete(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoDeleteRequest) (*schemas.BifrostVideoDeleteResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoDeleteRequest, provider.GetProviderKey())
+}
+
+// VideoList is not supported by OpenRouter provider.
+func (provider *OpenRouterProvider) VideoList(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoListRequest) (*schemas.BifrostVideoListResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoListRequest, provider.GetProviderKey())
+}
+
+// VideoRemix is not supported by OpenRouter provider.
+func (provider *OpenRouterProvider) VideoRemix(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoRemixRequest) (*schemas.BifrostVideoGenerationResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoRemixRequest, provider.GetProviderKey())
 }
 
 // BatchCreate is not supported by OpenRouter provider.

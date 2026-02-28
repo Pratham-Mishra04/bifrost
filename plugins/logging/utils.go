@@ -326,6 +326,20 @@ func (p *LoggerPlugin) extractInputHistory(request *schemas.BifrostRequest) ([]s
 			},
 		}, []schemas.ResponsesMessage{}
 	}
+	if request.RerankRequest != nil {
+		query := request.RerankRequest.Query
+		return []schemas.ChatMessage{
+			{
+				Role: schemas.ChatMessageRoleUser,
+				Content: &schemas.ChatMessageContent{
+					ContentStr: &query,
+				},
+			},
+		}, []schemas.ResponsesMessage{}
+	}
+	if request.CountTokensRequest != nil && len(request.CountTokensRequest.Input) > 0 {
+		return []schemas.ChatMessage{}, request.CountTokensRequest.Input
+	}
 	return []schemas.ChatMessage{}, []schemas.ResponsesMessage{}
 }
 

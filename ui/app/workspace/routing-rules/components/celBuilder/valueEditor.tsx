@@ -18,9 +18,6 @@ import { getProviderLabel } from "@/lib/constants/logs";
 import { ModelMultiselect } from "@/components/ui/modelMultiselect";
 
 export function ValueEditor({ value, handleOnChange, operator, fieldData, type, context }: ValueEditorProps) {
-	// Extract allowCustomModels from context
-	const allowCustomModels = context?.allowCustomModels ?? false;
-
 	// Compute all conditions upfront before any early returns
 	const isArrayOperator = operator === "in" || operator === "notIn";
 	const isRegexOperator = operator === "matches";
@@ -114,7 +111,6 @@ export function ValueEditor({ value, handleOnChange, operator, fieldData, type, 
 					onChange={handleMultiModelChange}
 					placeholder="Select models..."
 					loadModelsOnEmptyProvider
-					allowCustomValuesForSingleSelect
 					className="!min-h-9 w-[360px]"
 				/>
 			);
@@ -125,10 +121,9 @@ export function ValueEditor({ value, handleOnChange, operator, fieldData, type, 
 			<ModelMultiselect
 				value={value || ""}
 				onChange={handleOnChange}
-				placeholder="Select a model..."
+				placeholder="Search for a model..."
 				isSingleSelect
 				loadModelsOnEmptyProvider
-				allowCustomValuesForSingleSelect
 				className="w-[360px] border-input"
 			/>
 		);
@@ -211,6 +206,7 @@ export function ValueEditor({ value, handleOnChange, operator, fieldData, type, 
 					{fieldData.values.map((option) => {
 						if ("options" in option) return null; // Skip option groups
 						const optName = (option as any).name || "";
+						if (!optName) return null; // Skip empty values — SelectItem requires non-empty value
 						const optLabel = (option as any).label || optName;
 						const optDisabled = (option as any).disabled || false;
 

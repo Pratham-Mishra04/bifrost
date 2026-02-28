@@ -10,19 +10,20 @@ require (
 	github.com/google/pprof v0.0.0-20251213031049-b05bdaca462f
 	github.com/google/uuid v1.6.0
 	github.com/mark3labs/mcp-go v0.43.2
-	github.com/maximhq/bifrost/core v1.4.3
-	github.com/maximhq/bifrost/framework v1.2.21
-	github.com/maximhq/bifrost/plugins/governance v1.4.22
-	github.com/maximhq/bifrost/plugins/litellmcompat v0.0.11
-	github.com/maximhq/bifrost/plugins/logging v1.4.21
-	github.com/maximhq/bifrost/plugins/maxim v1.5.20
-	github.com/maximhq/bifrost/plugins/otel v1.1.21
-	github.com/maximhq/bifrost/plugins/semanticcache v1.4.20
-	github.com/maximhq/bifrost/plugins/telemetry v1.4.22
+	github.com/maximhq/bifrost/core v1.4.4
+	github.com/maximhq/bifrost/framework v1.2.23
+	github.com/maximhq/bifrost/plugins/governance v1.4.24
+	github.com/maximhq/bifrost/plugins/litellmcompat v0.0.13
+	github.com/maximhq/bifrost/plugins/logging v1.4.23
+	github.com/maximhq/bifrost/plugins/maxim v1.5.22
+	github.com/maximhq/bifrost/plugins/otel v1.1.23
+	github.com/maximhq/bifrost/plugins/semanticcache v1.4.22
+	github.com/maximhq/bifrost/plugins/telemetry v1.4.24
 	github.com/prometheus/client_golang v1.23.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
 	github.com/valyala/fasthttp v1.68.0
+	golang.org/x/sync v0.19.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
 )
@@ -109,7 +110,7 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
-	github.com/maximhq/bifrost/plugins/mocker v1.4.21 // indirect
+	github.com/maximhq/bifrost/plugins/mocker v1.4.23 // indirect
 	github.com/maximhq/maxim-go v0.1.14 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oapi-codegen/runtime v1.1.1 // indirect
@@ -150,8 +151,7 @@ require (
 	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409 // indirect

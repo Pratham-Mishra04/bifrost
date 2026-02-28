@@ -100,6 +100,18 @@ export const DefaultReplicateKeyConfig: ReplicateKeyConfig = {
 	deployments: {},
 } as const satisfies Required<ReplicateKeyConfig>;
 
+// VLLMKeyConfig matching Go's schemas.VLLMKeyConfig
+export interface VLLMKeyConfig {
+	url: EnvVar;
+	model_name: string;
+}
+
+// Default VLLMKeyConfig
+export const DefaultVLLMKeyConfig: VLLMKeyConfig = {
+	url: { value: "", env_var: "", from_env: false },
+	model_name: "",
+} as const satisfies Required<VLLMKeyConfig>;
+
 // Key structure matching Go's schemas.Key
 export interface ModelProviderKey {
 	id: string;
@@ -113,6 +125,7 @@ export interface ModelProviderKey {
 	vertex_key_config?: VertexKeyConfig;
 	bedrock_key_config?: BedrockKeyConfig;
 	replicate_key_config?: ReplicateKeyConfig;
+	vllm_key_config?: VLLMKeyConfig;
 	config_hash?: string; // Present when config is synced from config.json
 	status?: "unknown" | "success" | "list_models_failed";
 	description?: string;
@@ -171,6 +184,7 @@ export type RequestType =
 	| "responses"
 	| "responses_stream"
 	| "embedding"
+	| "rerank"
 	| "speech"
 	| "speech_stream"
 	| "transcription"
@@ -180,6 +194,12 @@ export type RequestType =
 	| "image_edit"
 	| "image_edit_stream"
 	| "image_variation"
+	| "video_generation"
+	| "video_retrieve"
+	| "video_download"
+	| "video_delete"
+	| "video_list"
+	| "video_remix"
 	| "count_tokens"
 	| "batch_create"
 	| "batch_list"
@@ -222,6 +242,13 @@ export interface AllowedRequests {
 	image_variation: boolean;
 	count_tokens: boolean;
 	list_models: boolean;
+	rerank: boolean;
+	video_generation: boolean;
+	video_retrieve: boolean;
+	video_download: boolean;
+	video_delete: boolean;
+	video_list: boolean;
+	video_remix: boolean;
 }
 
 // CustomProviderConfig matching Go's schemas.CustomProviderConfig
@@ -230,6 +257,40 @@ export interface CustomProviderConfig {
 	is_key_less?: boolean;
 	allowed_requests?: AllowedRequests;
 	request_path_overrides?: Record<string, string>;
+}
+
+export type PricingOverrideMatchType = "exact" | "wildcard" | "regex";
+
+export interface ProviderPricingOverride {
+	model_pattern: string;
+	match_type: PricingOverrideMatchType;
+	request_types?: RequestType[];
+	input_cost_per_token?: number;
+	output_cost_per_token?: number;
+	input_cost_per_video_per_second?: number;
+	input_cost_per_audio_per_second?: number;
+	input_cost_per_character?: number;
+	output_cost_per_character?: number;
+	input_cost_per_token_above_128k_tokens?: number;
+	input_cost_per_character_above_128k_tokens?: number;
+	input_cost_per_image_above_128k_tokens?: number;
+	input_cost_per_video_per_second_above_128k_tokens?: number;
+	input_cost_per_audio_per_second_above_128k_tokens?: number;
+	output_cost_per_token_above_128k_tokens?: number;
+	output_cost_per_character_above_128k_tokens?: number;
+	input_cost_per_token_above_200k_tokens?: number;
+	output_cost_per_token_above_200k_tokens?: number;
+	cache_creation_input_token_cost_above_200k_tokens?: number;
+	cache_read_input_token_cost_above_200k_tokens?: number;
+	cache_read_input_token_cost?: number;
+	cache_creation_input_token_cost?: number;
+	input_cost_per_token_batches?: number;
+	output_cost_per_token_batches?: number;
+	input_cost_per_image_token?: number;
+	output_cost_per_image_token?: number;
+	input_cost_per_image?: number;
+	output_cost_per_image?: number;
+	cache_read_input_image_token_cost?: number;
 }
 
 // ProviderConfig matching Go's lib.ProviderConfig
@@ -241,6 +302,7 @@ export interface ModelProviderConfig {
 	send_back_raw_request?: boolean;
 	send_back_raw_response?: boolean;
 	custom_provider_config?: CustomProviderConfig;
+	pricing_overrides?: ProviderPricingOverride[];
 	status?: "unknown" | "success" | "list_models_failed";
 	description?: string;
 }
@@ -268,6 +330,7 @@ export interface AddProviderRequest {
 	send_back_raw_request?: boolean;
 	send_back_raw_response?: boolean;
 	custom_provider_config?: CustomProviderConfig;
+	pricing_overrides?: ProviderPricingOverride[];
 }
 
 // UpdateProviderRequest matching Go's UpdateProviderRequest
@@ -279,6 +342,7 @@ export interface UpdateProviderRequest {
 	send_back_raw_request?: boolean;
 	send_back_raw_response?: boolean;
 	custom_provider_config?: CustomProviderConfig;
+	pricing_overrides?: ProviderPricingOverride[];
 }
 
 // BifrostErrorResponse matching Go's schemas.BifrostError
@@ -390,7 +454,6 @@ export interface CoreConfig {
 	disable_content_logging: boolean;
 	disable_db_pings_in_health: boolean;
 	log_retention_days: number;
-	enable_governance: boolean;
 	enforce_auth_on_inference: boolean;
 	allow_direct_keys: boolean;
 	allowed_origins: string[];
@@ -415,7 +478,6 @@ export const DefaultCoreConfig: CoreConfig = {
 	disable_content_logging: false,
 	disable_db_pings_in_health: false,
 	log_retention_days: 365,
-	enable_governance: true,
 	enforce_auth_on_inference: false,
 	allow_direct_keys: false,
 	allowed_origins: [],

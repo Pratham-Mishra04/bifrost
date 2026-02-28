@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
 import { Control, UseFormReturn } from "react-hook-form";
 
 // Providers that support batch APIs
-const BATCH_SUPPORTED_PROVIDERS = ["openai", "bedrock", "anthropic", "gemini"];
+const BATCH_SUPPORTED_PROVIDERS = ["openai", "bedrock", "anthropic", "gemini", "azure"];
 
 interface Props {
 	control: Control<any>;
@@ -54,6 +54,7 @@ export function ApiKeyFormFragment({ control, providerName, form }: Props) {
 	const isVertex = providerName === "vertex";
 	const isAzure = providerName === "azure";
 	const isReplicate = providerName === "replicate";
+	const isVLLM = providerName === "vllm";
 	const supportsBatchAPI = BATCH_SUPPORTED_PROVIDERS.includes(providerName);
 
 	// Auth type state for Azure: 'api_key' or 'entra_id'
@@ -170,7 +171,7 @@ export function ApiKeyFormFragment({ control, providerName, form }: Props) {
 					name={`key.value`}
 					render={({ field }) => (
 						<FormItem>
-							<FormLabel>API Key {isVertex ? "(Supported only for gemini and fine-tuned models)" : ""}</FormLabel>
+							<FormLabel>API Key {isVertex ? "(Supported only for gemini and fine-tuned models)" : isVLLM ? "(Optional)" : ""}</FormLabel>
 							<FormControl>
 								<EnvVarInput placeholder="API Key or env.MY_KEY" type="text" {...field} />
 							</FormControl>
@@ -179,33 +180,35 @@ export function ApiKeyFormFragment({ control, providerName, form }: Props) {
 					)}
 				/>
 			)}
-			<FormField
-				control={control}
-				name={`key.models`}
-				render={({ field }) => (
-					<FormItem>
-						<div className="flex items-center gap-2">
-							<FormLabel>Models</FormLabel>
-							<TooltipProvider>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<span>
-											<Info className="text-muted-foreground h-3 w-3" />
-										</span>
-									</TooltipTrigger>
-									<TooltipContent>
-										<p>Comma-separated list of models this key applies to. Leave blank for all models.</p>
-									</TooltipContent>
-								</Tooltip>
-							</TooltipProvider>
-						</div>
-						<FormControl>
-							<ModelMultiselect provider={providerName} value={field.value || []} onChange={field.onChange} />
-						</FormControl>
-						<FormMessage />
-					</FormItem>
-				)}
-			/>
+			{!isVLLM && (
+				<FormField
+					control={control}
+					name={`key.models`}
+					render={({ field }) => (
+						<FormItem>
+							<div className="flex items-center gap-2">
+								<FormLabel>Models</FormLabel>
+								<TooltipProvider>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<span>
+												<Info className="text-muted-foreground h-3 w-3" />
+											</span>
+										</TooltipTrigger>
+										<TooltipContent>
+											<p>Comma-separated list of models this key applies to. Leave blank for all models.</p>
+										</TooltipContent>
+									</Tooltip>
+								</TooltipProvider>
+							</div>
+							<FormControl>
+								<ModelMultiselect provider={providerName} value={field.value || []} onChange={field.onChange} unfiltered={true} />
+							</FormControl>
+							<FormMessage />
+						</FormItem>
+					)}
+				/>
+			)}
 			{supportsBatchAPI && !isBedrock && !isAzure && <BatchAPIFormField control={control} form={form} />}
 			{isAzure && (
 				<div className="space-y-4">
@@ -316,7 +319,7 @@ export function ApiKeyFormFragment({ control, providerName, form }: Props) {
 													</TooltipTrigger>
 													<TooltipContent>
 														<p>Optional OAuth scopes for token requests. By default we use
-														https://cognitiveservices.azure.com/.default — add additional scopes here if your setup requires extra permissions.</p>
+															https://cognitiveservices.azure.com/.default - add additional scopes here if your setup requires extra permissions.</p>
 													</TooltipContent>
 												</Tooltip>
 											</TooltipProvider>
@@ -426,31 +429,31 @@ export function ApiKeyFormFragment({ control, providerName, form }: Props) {
 							Leave both API Key and Auth Credentials empty to use service account attached to your environment.
 						</AlertDescription>
 					</Alert>
-				<FormField
-					control={control}
-					name={`key.vertex_key_config.auth_credentials`}
-					render={({ field }) => (
-						<FormItem>
-							<FormLabel>Auth Credentials</FormLabel>
-							<FormDescription>Service account JSON object or env.VAR_NAME</FormDescription>
-							<FormControl>
-								<EnvVarInput
-									variant="textarea"
-									rows={4}
-									placeholder='{"type":"service_account","project_id":"your-gcp-project",...} or env.VERTEX_CREDENTIALS'
-									inputClassName="font-mono text-sm"
-									{...field}
-								/>
-							</FormControl>
-							{isRedacted(field.value?.value ?? "") && (
-								<div className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
-									<Info className="h-3 w-3" />
-									<span>Credentials are stored securely. Edit to update.</span>
-								</div>
-							)}
-						</FormItem>
-					)}
-				/>
+					<FormField
+						control={control}
+						name={`key.vertex_key_config.auth_credentials`}
+						render={({ field }) => (
+							<FormItem>
+								<FormLabel>Auth Credentials</FormLabel>
+								<FormDescription>Service account JSON object or env.VAR_NAME</FormDescription>
+								<FormControl>
+									<EnvVarInput
+										variant="textarea"
+										rows={4}
+										placeholder='{"type":"service_account","project_id":"your-gcp-project",...} or env.VERTEX_CREDENTIALS'
+										inputClassName="font-mono text-sm"
+										{...field}
+									/>
+								</FormControl>
+								{isRedacted(field.value?.value ?? "") && (
+									<div className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
+										<Info className="h-3 w-3" />
+										<span>Credentials are stored securely. Edit to update.</span>
+									</div>
+								)}
+							</FormItem>
+						)}
+					/>
 					<FormField
 						control={control}
 						name={`key.vertex_key_config.deployments`}
@@ -527,6 +530,39 @@ export function ApiKeyFormFragment({ control, providerName, form }: Props) {
 										rows={3}
 										className="max-w-full font-mono text-sm wrap-anywhere"
 									/>
+								</FormControl>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+				</div>
+			)}
+			{isVLLM && (
+				<div className="space-y-4">
+					<Separator className="my-6" />
+					<FormField
+						control={control}
+						name="key.vllm_key_config.url"
+						render={({ field }) => (
+							<FormItem>
+								<FormLabel>Server URL (Required)</FormLabel>
+								<FormDescription>Base URL of the vLLM server (e.g. http://vllm-server:8000 or env.VLLM_URL)</FormDescription>
+								<FormControl>
+									<EnvVarInput data-testid="key-input-vllm-url" placeholder="http://vllm-server:8000" {...field} />
+								</FormControl>
+								<FormMessage />
+							</FormItem>
+						)}
+					/>
+					<FormField
+						control={control}
+						name="key.vllm_key_config.model_name"
+						render={({ field }) => (
+							<FormItem>
+								<FormLabel>Model Name (Required)</FormLabel>
+								<FormDescription>Exact model name served on this vLLM instance</FormDescription>
+								<FormControl>
+									<Input data-testid="key-input-vllm-model-name" placeholder="meta-llama/Llama-3-70b-hf" {...field} />
 								</FormControl>
 								<FormMessage />
 							</FormItem>

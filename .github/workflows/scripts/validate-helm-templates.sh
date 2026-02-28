@@ -173,10 +173,40 @@ test_template "sqlite + qdrant" \
   --set vectorStore.type=qdrant \
   --set vectorStore.qdrant.enabled=true
 
-# 3. Special Configurations (4 tests)
+# 3. Special Configurations (7 tests)
 echo ""
-echo -e "${CYAN}⚙️  3/3 - Testing Special Configurations (4 tests)...${NC}"
+echo -e "${CYAN}⚙️  3/3 - Testing Special Configurations (7 tests)...${NC}"
 echo "-----------------------------------------------------"
+
+# semantic cache: direct mode (dimension: 1, no provider/keys)
+test_template "semanticCache: direct mode (dimension: 1)" \
+  --set bifrost.plugins.semanticCache.enabled=true \
+  --set bifrost.plugins.semanticCache.config.dimension=1 \
+  --set bifrost.plugins.semanticCache.config.ttl=30m \
+  --set vectorStore.enabled=true \
+  --set vectorStore.type=redis \
+  --set vectorStore.redis.enabled=true
+
+# semantic cache: semantic mode (dimension > 1, requires provider/keys)
+test_template "semanticCache: semantic mode (dimension: 1536)" \
+  --set bifrost.plugins.semanticCache.enabled=true \
+  --set bifrost.plugins.semanticCache.config.dimension=1536 \
+  --set bifrost.plugins.semanticCache.config.provider=openai \
+  --set 'bifrost.plugins.semanticCache.config.keys[0]=sk-test' \
+  --set vectorStore.enabled=true \
+  --set vectorStore.type=redis \
+  --set vectorStore.redis.enabled=true
+
+# semantic cache: direct mode with redis + postgres
+test_template "semanticCache: direct mode + postgres" \
+  --set bifrost.plugins.semanticCache.enabled=true \
+  --set bifrost.plugins.semanticCache.config.dimension=1 \
+  --set storage.mode=postgres \
+  --set postgresql.enabled=true \
+  --set postgresql.auth.password=testpass \
+  --set vectorStore.enabled=true \
+  --set vectorStore.type=redis \
+  --set vectorStore.redis.enabled=true
 
 # sqlite + persistence + autoscaling (StatefulSet HPA)
 test_template "sqlite + persistence + autoscaling (StatefulSet)" \
@@ -218,6 +248,35 @@ test_template "production-like config" \
   --set 'ingress.hosts[0].host=bifrost.example.com' \
   --set 'ingress.hosts[0].paths[0].path=/' \
   --set 'ingress.hosts[0].paths[0].pathType=Prefix'
+
+# 4. Plugin Name Validation
+echo ""
+echo -e "${CYAN}🔌 4/4 - Validating Plugin Names Match Go Registry...${NC}"
+echo "------------------------------------------------------"
+
+# Verify semantic cache plugin renders with correct name ("semantic_cache", not "semanticcache")
+# Go registry: plugins/semanticcache/main.go defines PluginName = "semantic_cache"
+test_name="semanticCache plugin name matches Go registry (semantic_cache)"
+if helm template bifrost ./helm-charts/bifrost \
+  --set image.tag=v1.0.0 \
+  --set bifrost.plugins.semanticCache.enabled=true \
+  --set bifrost.plugins.semanticCache.config.dimension=1536 \
+  --set bifrost.plugins.semanticCache.config.provider=openai \
+  --set 'bifrost.plugins.semanticCache.config.keys[0]=sk-test' \
+  --set vectorStore.enabled=true \
+  --set vectorStore.type=redis \
+  --set vectorStore.redis.enabled=true \
+  > /tmp/helm-template-output.yaml 2>&1; then
+  if grep -Eq '"name"[[:space:]]*:[[:space:]]*"semantic_cache"' /tmp/helm-template-output.yaml; then
+    report_result "$test_name" 0
+  else
+    report_result "$test_name" 1
+  fi
+else
+  report_result "$test_name" 1
+  echo -e "${YELLOW}  Error output:${NC}"
+  head -10 /tmp/helm-template-output.yaml | sed 's/^/    /'
+fi
 
 # Cleanup
 rm -f /tmp/helm-template-output.yaml

@@ -39,6 +39,7 @@ import LogEntryDetailsView from "../views/logEntryDetailsView";
 import LogResponsesMessageView from "../views/logResponsesMessageView";
 import SpeechView from "../views/speechView";
 import TranscriptionView from "../views/transcriptionView";
+import VideoView from "../views/videoView";
 
 interface LogDetailSheetProps {
 	log: LogEntry | null;
@@ -73,12 +74,15 @@ export function LogDetailSheet({ log, open, onOpenChange, handleDelete }: LogDet
 	if (log.params?.tools) {
 		try {
 			toolsParameter = JSON.stringify(log.params.tools, null, 2);
-		} catch (ignored) {}
+		} catch (ignored) { }
 	}
 
 	// Extract audio format from request params
 	// Format can be in params.audio?.format or params.extra_params?.audio?.format
 	const audioFormat = (log.params as any)?.audio?.format || (log.params as any)?.extra_params?.audio?.format || undefined;
+	const videoOutput =
+		log.video_generation_output || log.video_retrieve_output || log.video_download_output;
+	const videoListOutput = log.video_list_output;
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
@@ -190,9 +194,8 @@ export function LogDetailSheet({ log, open, onOpenChange, handleDelete }: LogDet
 								label="Type"
 								value={
 									<div
-										className={`${
-											RequestTypeColors[log.object as keyof typeof RequestTypeColors] ?? "bg-gray-100 text-gray-800"
-										} rounded-sm px-3 py-1`}
+										className={`${RequestTypeColors[log.object as keyof typeof RequestTypeColors] ?? "bg-gray-100 text-gray-800"
+											} rounded-sm px-3 py-1`}
 									>
 										{RequestTypeLabels[log.object as keyof typeof RequestTypeLabels] ?? log.object ?? "unknown"}
 									</div>
@@ -502,6 +505,15 @@ export function LogDetailSheet({ log, open, onOpenChange, handleDelete }: LogDet
 					<ImageView imageInput={log.image_generation_input} imageOutput={log.image_generation_output} requestType={log.object} />
 				)}
 
+				{(log.video_generation_input || videoOutput || videoListOutput) && (
+					<VideoView
+						videoInput={log.video_generation_input}
+						videoOutput={videoOutput}
+						videoListOutput={videoListOutput}
+						requestType={log.object}
+					/>
+				)}
+
 				{log.list_models_output && (
 					<CollapsibleBox
 						title={`List Models Output (${log.list_models_output.length})`}
@@ -575,6 +587,25 @@ export function LogDetailSheet({ log, open, onOpenChange, handleDelete }: LogDet
 										),
 									}}
 								/>
+							</>
+						)}
+						{log.rerank_output && !log.error_details?.error.message && (
+							<>
+								<CollapsibleBox
+									title={`Rerank Output (${log.rerank_output.length})`}
+									onCopy={() => JSON.stringify(log.rerank_output, null, 2)}
+								>
+									<CodeEditor
+										className="z-0 w-full"
+										shouldAdjustInitialHeight={true}
+										maxHeight={450}
+										wrap={true}
+										code={JSON.stringify(log.rerank_output, null, 2)}
+										lang="json"
+										readonly={true}
+										options={{ scrollBeyondLastLine: false, lineNumbers: "off", alwaysConsumeMouseWheel: false }}
+									/>
+								</CollapsibleBox>
 							</>
 						)}
 						{log.raw_request && (

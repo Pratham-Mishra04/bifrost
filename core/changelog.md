@@ -1,3 +1,2 @@
-- refactor: ListModelsRequest to use the common request handling pipeline instead of its own implementation
-- feat: added support for filtering /v1/models responses based on virtual key configurations in the governance plugin
-- feat: add vllm provider support
+- fix: filter openrouter list models response based on allowed models on key
+- feat: add count tokens support for bedrock

@@ -427,8 +427,6 @@ export default function VirtualKeySheet({ virtualKey, teams, customers, onSave, 
 		<Sheet open={isOpen} onOpenChange={(open) => !open && handleClose()}>
 			<SheetContent
 				className="dark:bg-card flex w-full flex-col overflow-x-hidden bg-white px-4 pb-8"
-				onInteractOutside={(e) => e.preventDefault()}
-				onEscapeKeyDown={(e) => e.preventDefault()}
 				data-testid="vk-sheet"
 			>
 				<SheetHeader className="flex flex-col items-start px-3 pt-8">
@@ -535,7 +533,7 @@ export default function VirtualKeySheet({ virtualKey, teams, customers, onSave, 
 												return (
 													<>
 														{/* Base providers first */}
-														{baseProviders.map((provider, index) => (
+														{baseProviders.filter((p) => p.name).map((provider, index) => (
 															<SelectItem key={`base-${index}`} value={provider.name}>
 																<RenderProviderIcon provider={provider.name as KnownProvider} size="sm" className="h-4 w-4" />
 																{ProviderLabels[provider.name as ProviderName]}
@@ -543,7 +541,7 @@ export default function VirtualKeySheet({ virtualKey, teams, customers, onSave, 
 														))}
 
 														{/* Custom providers second */}
-														{customProviders.map((provider, index) => (
+														{customProviders.filter((p) => p.name).map((provider, index) => (
 															<SelectItem key={`custom-${index}`} value={provider.name}>
 																<RenderProviderIcon
 																	provider={provider.custom_provider_config?.base_provider_type || (provider.name as KnownProvider)}
@@ -859,7 +857,7 @@ export default function VirtualKeySheet({ virtualKey, teams, customers, onSave, 
 													{mcpClientsData.filter((client) => !mcpConfigs.some((config) => config.mcp_client_name === client.config.name))
 														.length > 0 ? (
 														mcpClientsData
-															.filter((client) => !mcpConfigs.some((config) => config.mcp_client_name === client.config.name))
+															.filter((client) => client.config.name && !mcpConfigs.some((config) => config.mcp_client_name === client.config.name))
 															.map((client, index) => {
 																const client_tools = client.tools || [];
 																const totalTools = client.config.tools_to_execute?.includes("*")
