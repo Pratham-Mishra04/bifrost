@@ -154,6 +154,9 @@ func triggerMigrations(ctx context.Context, db *gorm.DB) error {
 	if err := migrationAddVideoColumns(ctx, db); err != nil {
 		return err
 	}
+	if err := migrationAddAgentIDAndNameColumns(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1504,6 +1507,106 @@ func migrationAddVideoColumns(ctx context.Context, db *gorm.DB) error {
 	err := m.Migrate()
 	if err != nil {
 		return fmt.Errorf("error while adding video columns: %s", err.Error())
+	}
+	return nil
+}
+
+func migrationAddAgentIDAndNameColumns(ctx context.Context, db *gorm.DB) error {
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = true
+	m := migrator.New(db, &opts, []*migrator.Migration{{
+		ID: "logs_add_agent_id_and_name_columns",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+
+			// Add agent_id and agent_name columns to logs table
+			if !migrator.HasColumn(&Log{}, "agent_id") {
+				if err := migrator.AddColumn(&Log{}, "agent_id"); err != nil {
+					return err
+				}
+			}
+			if !migrator.HasColumn(&Log{}, "agent_name") {
+				if err := migrator.AddColumn(&Log{}, "agent_name"); err != nil {
+					return err
+				}
+			}
+
+			// Create index on agent_id for filtering
+			if !migrator.HasIndex(&Log{}, "idx_logs_agent_id") {
+				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_logs_agent_id ON logs(agent_id)").Error; err != nil {
+					return fmt.Errorf("failed to create index idx_logs_agent_id: %w", err)
+				}
+			}
+
+			// Add agent_id and agent_name columns to mcp_tool_logs table
+			if !migrator.HasColumn(&MCPToolLog{}, "agent_id") {
+				if err := migrator.AddColumn(&MCPToolLog{}, "agent_id"); err != nil {
+					return err
+				}
+			}
+			if !migrator.HasColumn(&MCPToolLog{}, "agent_name") {
+				if err := migrator.AddColumn(&MCPToolLog{}, "agent_name"); err != nil {
+					return err
+				}
+			}
+
+			// Create index on agent_id for mcp_tool_logs
+			if !migrator.HasIndex(&MCPToolLog{}, "idx_mcp_logs_agent_id") {
+				if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_mcp_logs_agent_id ON mcp_tool_logs(agent_id)").Error; err != nil {
+					return fmt.Errorf("failed to create index idx_mcp_logs_agent_id: %w", err)
+				}
+			}
+
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+
+			// Remove indexes
+			if migrator.HasIndex(&Log{}, "idx_logs_agent_id") {
+				if err := tx.Exec("DROP INDEX IF EXISTS idx_logs_agent_id").Error; err != nil {
+					return fmt.Errorf("failed to drop index idx_logs_agent_id: %w", err)
+				}
+			}
+
+			if migrator.HasIndex(&MCPToolLog{}, "idx_mcp_logs_agent_id") {
+				if err := tx.Exec("DROP INDEX IF EXISTS idx_mcp_logs_agent_id").Error; err != nil {
+					return fmt.Errorf("failed to drop index idx_mcp_logs_agent_id: %w", err)
+				}
+			}
+
+			// Drop columns from logs table
+			if migrator.HasColumn(&Log{}, "agent_id") {
+				if err := migrator.DropColumn(&Log{}, "agent_id"); err != nil {
+					return err
+				}
+			}
+			if migrator.HasColumn(&Log{}, "agent_name") {
+				if err := migrator.DropColumn(&Log{}, "agent_name"); err != nil {
+					return err
+				}
+			}
+
+			// Drop columns from mcp_tool_logs table
+			if migrator.HasColumn(&MCPToolLog{}, "agent_id") {
+				if err := migrator.DropColumn(&MCPToolLog{}, "agent_id"); err != nil {
+					return err
+				}
+			}
+			if migrator.HasColumn(&MCPToolLog{}, "agent_name") {
+				if err := migrator.DropColumn(&MCPToolLog{}, "agent_name"); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		},
+	}})
+	err := m.Migrate()
+	if err != nil {
+		return fmt.Errorf("error while adding agent ID and name columns: %s", err.Error())
 	}
 	return nil
 }

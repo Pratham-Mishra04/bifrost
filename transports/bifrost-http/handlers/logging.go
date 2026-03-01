@@ -87,6 +87,9 @@ func (h *LoggingHandler) getLogs(ctx *fasthttp.RequestCtx) {
 	if virtualKeyIDs := string(ctx.QueryArgs().Peek("virtual_key_ids")); virtualKeyIDs != "" {
 		filters.VirtualKeyIDs = parseCommaSeparated(virtualKeyIDs)
 	}
+	if agentIDs := string(ctx.QueryArgs().Peek("agent_ids")); agentIDs != "" {
+		filters.AgentIDs = parseCommaSeparated(agentIDs)
+	}
 	if routingRuleIDs := string(ctx.QueryArgs().Peek("routing_rule_ids")); routingRuleIDs != "" {
 		filters.RoutingRuleIDs = parseCommaSeparated(routingRuleIDs)
 	}
@@ -824,6 +827,9 @@ func parseMCPFiltersAndPagination(ctx *fasthttp.RequestCtx) (*logstore.MCPToolLo
 	}
 	if virtualKeyIDs := string(ctx.QueryArgs().Peek("virtual_key_ids")); virtualKeyIDs != "" {
 		filters.VirtualKeyIDs = parseCommaSeparated(virtualKeyIDs)
+	}
+	if agentIDs := string(ctx.QueryArgs().Peek("agent_ids")); agentIDs != "" {
+		filters.AgentIDs = parseCommaSeparated(agentIDs)
 	}
 	if llmRequestIDs := string(ctx.QueryArgs().Peek("llm_request_ids")); llmRequestIDs != "" {
 		filters.LLMRequestIDs = parseCommaSeparated(llmRequestIDs)

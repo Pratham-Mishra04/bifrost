@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -19,7 +20,66 @@ import (
 
 var loggingSkipPaths = []string{"/health", "/_next", "/api/dev"}
 
-// CorsMiddleware handles CORS headers for localhost and configured allowed origins
+// System paths that are always allowed (bypass path whitelisting)
+var systemBypassPaths = []string{"/health", "/_next", "/ws", "/api/session", "/api/oauth"}
+
+// PathWhitelistMiddleware blocks all paths not matching whitelisted patterns.
+// If whitelisted_path_patterns is configured, only those paths are allowed.
+// System paths (health, session, oauth, websocket) are always allowed.
+// Returns 403 Forbidden for blocked paths.
+func PathWhitelistMiddleware(config *lib.Config) schemas.BifrostHTTPMiddleware {
+	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+		return func(ctx *fasthttp.RequestCtx) {
+			// If no whitelisted patterns configured, allow all paths
+			if len(config.ClientConfig.WhitelistedPathPatterns) == 0 {
+				next(ctx)
+				return
+			}
+
+			requestPath := string(ctx.Path())
+
+			// Always allow system bypass paths
+			for _, bypassPath := range systemBypassPaths {
+				if strings.HasPrefix(requestPath, bypassPath) {
+					next(ctx)
+					return
+				}
+			}
+
+			// Strip leading slash for pattern matching (patterns don't include leading slash)
+			// e.g., "/api/mnemo/version" becomes "api/mnemo/version"
+			pathForMatching := strings.TrimPrefix(requestPath, "/")
+
+			// Check if path matches any whitelisted pattern
+			pathAllowed := false
+			for _, pattern := range config.ClientConfig.WhitelistedPathPatterns {
+				matched, err := filepath.Match(pattern, pathForMatching)
+				if err != nil {
+					// If pattern is invalid, log warning and skip to next pattern
+					logger.Warn("invalid whitelisted_path_pattern: %v", err)
+					continue
+				}
+				if matched {
+					pathAllowed = true
+					break
+				}
+			}
+
+			// If path doesn't match any pattern, return 403 Forbidden
+			if !pathAllowed {
+				ctx.SetStatusCode(fasthttp.StatusForbidden)
+				ctx.SetContentType("application/json")
+				ctx.SetBodyString(`{"message":"path not whitelisted"}`)
+				return
+			}
+
+			next(ctx)
+		}
+	}
+}
+
+// CorsMiddleware handles CORS headers for localhost and configured allowed origins.
+// Path-based access control is handled by PathWhitelistMiddleware.
 func CorsMiddleware(config *lib.Config) schemas.BifrostHTTPMiddleware {
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {

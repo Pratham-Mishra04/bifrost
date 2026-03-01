@@ -138,6 +138,13 @@
             "type": "string"
           },
           "description": "Headers to capture in log metadata. Values are extracted from incoming requests and stored in the metadata field of log entries."
+        },
+        "whitelisted_path_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Path patterns to whitelist for CORS (e.g., ['api/mnemo/*', 'logs/*']). If set, only paths matching these patterns receive CORS headers. Supports glob patterns (*). If not set, all paths receive CORS headers (default behavior)."
         }
       },
       "additionalProperties": false

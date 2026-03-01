@@ -59,6 +59,8 @@ func (p *LoggerPlugin) updateLogEntry(
 	latency int64,
 	virtualKeyID string,
 	virtualKeyName string,
+	agentID string,
+	agentName string,
 	routingRuleID string,
 	routingRuleName string,
 	numberOfRetries int,
@@ -78,6 +80,12 @@ func (p *LoggerPlugin) updateLogEntry(
 	}
 	if virtualKeyName != "" {
 		updates["virtual_key_name"] = virtualKeyName
+	}
+	if agentID != "" {
+		updates["agent_id"] = agentID
+	}
+	if agentName != "" {
+		updates["agent_name"] = agentName
 	}
 	if routingRuleID != "" {
 		updates["routing_rule_id"] = routingRuleID
@@ -279,6 +287,8 @@ func (p *LoggerPlugin) updateStreamingLogEntry(
 	selectedKeyName string,
 	virtualKeyID string,
 	virtualKeyName string,
+	agentID string,
+	agentName string,
 	routingRuleID string,
 	routingRuleName string,
 	numberOfRetries int,
@@ -296,6 +306,12 @@ func (p *LoggerPlugin) updateStreamingLogEntry(
 	}
 	if virtualKeyName != "" {
 		updates["virtual_key_name"] = virtualKeyName
+	}
+	if agentID != "" {
+		updates["agent_id"] = agentID
+	}
+	if agentName != "" {
+		updates["agent_name"] = agentName
 	}
 	if routingRuleID != "" {
 		updates["routing_rule_id"] = routingRuleID

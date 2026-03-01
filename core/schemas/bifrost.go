@@ -213,6 +213,8 @@ const (
 	BifrostContextKeyTargetUserID                        BifrostContextKey = "target_user_id"
 	BifrostContextKeyIsAzureUserAgent                    BifrostContextKey = "bifrost-is-azure-user-agent" // bool (set by bifrost - DO NOT SET THIS MANUALLY)) - whether the request is an Azure user agent (only used in gateway)
 	BifrostContextKeyVideoOutputRequested                BifrostContextKey = "bifrost-video-output-requested"
+	BifrostContextKeyAgentID                            BifrostContextKey = "bifrost-agent-id"                         // string (agent ID - set by Mnemo)
+	BifrostContextKeyAgentName                          BifrostContextKey = "bifrost-agent-name"                       // string (agent name - set by Mnemo)
 )
 
 // RoutingEngine constants
