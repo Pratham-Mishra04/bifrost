@@ -403,14 +403,46 @@ func shouldSkipToolForConfig(toolName string, config *schemas.MCPClientConfig) b
 	return true // Tool is skipped (nil is treated as [] - no tools)
 }
 
-// canAutoExecuteTool checks if a tool can be auto-executed based on client configuration.
+// canAutoExecuteTool checks if a tool can be auto-executed based on client configuration and context overrides.
 // Returns true if the tool can be auto-executed, false otherwise.
-func canAutoExecuteTool(toolName string, config *schemas.MCPClientConfig) bool {
+// Precedence (highest to lowest):
+// 1. Agent-level "to not auto-execute" override (MCPContextKeyToolsToNotAutoExecute)
+// 2. Agent-level "to auto-execute" override (MCPContextKeyToolsToAutoExecute)
+// 3. Global client configuration (config.ToolsToAutoExecute)
+func canAutoExecuteTool(ctx *schemas.BifrostContext, toolName string, config *schemas.MCPClientConfig) bool {
 	// First check if tool is in ToolsToExecute (must be executable first)
 	if shouldSkipToolForConfig(toolName, config) {
 		return false // Tool is not in ToolsToExecute, so it cannot be auto-executed
 	}
 
+	// Convert toolName to fully-qualified format for context checks (e.g., "calculator-add")
+	qualifiedToolName := toolName
+	if config != nil && config.Name != "" {
+		// If toolName doesn't already have the client prefix, add it
+		if !strings.Contains(toolName, "-") {
+			qualifiedToolName = config.Name + "-" + toolName
+		}
+	}
+
+	// PRECEDENCE 1: Check agent-level "to not auto-execute" override
+	if ctx != nil {
+		if toolsToNotAutoExecute, ok := ctx.Value(MCPContextKeyToolsToNotAutoExecute).([]string); ok {
+			if slices.Contains(toolsToNotAutoExecute, qualifiedToolName) {
+				return false // Agent explicitly disables auto-execution
+			}
+		}
+	}
+
+	// PRECEDENCE 2: Check agent-level "to auto-execute" override
+	if ctx != nil {
+		if toolsToAutoExecute, ok := ctx.Value(MCPContextKeyToolsToAutoExecute).([]string); ok {
+			if slices.Contains(toolsToAutoExecute, qualifiedToolName) {
+				return true // Agent explicitly enables auto-execution
+			}
+		}
+	}
+
+	// PRECEDENCE 3: Fall back to global client configuration
 	// If ToolsToAutoExecute is specified (not nil), apply filtering
 	if config.ToolsToAutoExecute != nil {
 		// Handle empty array [] - means no tools are auto-executed

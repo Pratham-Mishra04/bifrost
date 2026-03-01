@@ -118,6 +118,9 @@ func triggerMigrations(ctx context.Context, db *gorm.DB) error {
 	if err := migrationAddVirtualKeyMCPConfigsTable(ctx, db); err != nil {
 		return err
 	}
+	if err := migrationAddMCPAutoExecuteOverrideColumns(ctx, db); err != nil {
+		return err
+	}
 	if err := migrationAddPluginPathColumn(ctx, db); err != nil {
 		return err
 	}
@@ -837,6 +840,66 @@ func migrationAddVirtualKeyMCPConfigsTable(ctx context.Context, db *gorm.DB) err
 			if err := migrator.DropTable(&tables.TableVirtualKeyMCPConfig{}); err != nil {
 				return err
 			}
+			return nil
+		},
+	}})
+	err := m.Migrate()
+	if err != nil {
+		return fmt.Errorf("error while running db migration: %s", err.Error())
+	}
+	return nil
+}
+
+// migrationAddMCPAutoExecuteOverrideColumns adds tools_to_auto_execute and tools_to_not_auto_execute columns
+// to allow agent-level overrides of global MCP tool auto-execution settings
+func migrationAddMCPAutoExecuteOverrideColumns(ctx context.Context, db *gorm.DB) error {
+	m := migrator.New(db, migrator.DefaultOptions, []*migrator.Migration{{
+		ID: "add_mcp_auto_execute_override_columns",
+		Migrate: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+
+			if !migrator.HasTable(&tables.TableVirtualKeyMCPConfig{}) {
+				return nil
+			}
+
+			// Add tools_to_auto_execute column if it doesn't exist
+			if !migrator.HasColumn(&tables.TableVirtualKeyMCPConfig{}, "tools_to_auto_execute") {
+				if err := migrator.AddColumn(&tables.TableVirtualKeyMCPConfig{}, "tools_to_auto_execute"); err != nil {
+					return fmt.Errorf("failed to add tools_to_auto_execute column: %w", err)
+				}
+			}
+
+			// Add tools_to_not_auto_execute column if it doesn't exist
+			if !migrator.HasColumn(&tables.TableVirtualKeyMCPConfig{}, "tools_to_not_auto_execute") {
+				if err := migrator.AddColumn(&tables.TableVirtualKeyMCPConfig{}, "tools_to_not_auto_execute"); err != nil {
+					return fmt.Errorf("failed to add tools_to_not_auto_execute column: %w", err)
+				}
+			}
+
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx = tx.WithContext(ctx)
+			migrator := tx.Migrator()
+
+			if !migrator.HasTable(&tables.TableVirtualKeyMCPConfig{}) {
+				return nil
+			}
+
+			// Drop the columns
+			if migrator.HasColumn(&tables.TableVirtualKeyMCPConfig{}, "tools_to_auto_execute") {
+				if err := migrator.DropColumn(&tables.TableVirtualKeyMCPConfig{}, "tools_to_auto_execute"); err != nil {
+					return err
+				}
+			}
+
+			if migrator.HasColumn(&tables.TableVirtualKeyMCPConfig{}, "tools_to_not_auto_execute") {
+				if err := migrator.DropColumn(&tables.TableVirtualKeyMCPConfig{}, "tools_to_not_auto_execute"); err != nil {
+					return err
+				}
+			}
+
 			return nil
 		},
 	}})

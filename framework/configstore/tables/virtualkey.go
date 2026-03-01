@@ -138,11 +138,13 @@ func (pc *TableVirtualKeyProviderConfig) AfterFind(tx *gorm.DB) error {
 }
 
 type TableVirtualKeyMCPConfig struct {
-	ID             uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	VirtualKeyID   string         `gorm:"type:varchar(255);not null;uniqueIndex:idx_vk_mcpclient" json:"virtual_key_id"`
-	MCPClientID    uint           `gorm:"not null;uniqueIndex:idx_vk_mcpclient" json:"mcp_client_id"`
-	MCPClient      TableMCPClient `gorm:"foreignKey:MCPClientID" json:"mcp_client"`
-	ToolsToExecute []string       `gorm:"type:text;serializer:json" json:"tools_to_execute"`
+	ID                      uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	VirtualKeyID            string         `gorm:"type:varchar(255);not null;uniqueIndex:idx_vk_mcpclient" json:"virtual_key_id"`
+	MCPClientID             uint           `gorm:"not null;uniqueIndex:idx_vk_mcpclient" json:"mcp_client_id"`
+	MCPClient               TableMCPClient `gorm:"foreignKey:MCPClientID" json:"mcp_client"`
+	ToolsToExecute          []string       `gorm:"type:text;serializer:json" json:"tools_to_execute"`
+	ToolsToAutoExecute      []string       `gorm:"type:text;serializer:json" json:"tools_to_auto_execute"`      // Override global: these tools will be auto-executed
+	ToolsToNotAutoExecute   []string       `gorm:"type:text;serializer:json" json:"tools_to_not_auto_execute"` // Override global: these tools will NOT be auto-executed
 
 	// MCPClientName is used during config file parsing to resolve the MCP client by name.
 	// This field is not persisted to the database - it's only used to capture

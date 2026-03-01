@@ -53,15 +53,26 @@ func PathWhitelistMiddleware(config *lib.Config) schemas.BifrostHTTPMiddleware {
 			// Check if path matches any whitelisted pattern
 			pathAllowed := false
 			for _, pattern := range config.ClientConfig.WhitelistedPathPatterns {
-				matched, err := filepath.Match(pattern, pathForMatching)
-				if err != nil {
-					// If pattern is invalid, log warning and skip to next pattern
-					logger.Warn("invalid whitelisted_path_pattern: %v", err)
-					continue
-				}
-				if matched {
-					pathAllowed = true
-					break
+				// Handle ** patterns (recursive wildcards)
+				// e.g., "api/mnemo/**" should match "api/mnemo/anything/nested/deep"
+				if strings.HasSuffix(pattern, "/**") {
+					prefix := strings.TrimSuffix(pattern, "/**")
+					if strings.HasPrefix(pathForMatching, prefix) && (pathForMatching == prefix || len(pathForMatching) > len(prefix) && pathForMatching[len(prefix)] == '/') {
+						pathAllowed = true
+						break
+					}
+				} else {
+					// Use standard filepath.Match for non-recursive patterns
+					matched, err := filepath.Match(pattern, pathForMatching)
+					if err != nil {
+						// If pattern is invalid, log warning and skip to next pattern
+						logger.Warn("invalid whitelisted_path_pattern: %v", err)
+						continue
+					}
+					if matched {
+						pathAllowed = true
+						break
+					}
 				}
 			}
 
