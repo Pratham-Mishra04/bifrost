@@ -26,9 +26,11 @@ const (
 	// NOTE: []string is used for both keys, and by default all clients/tools are included (when nil).
 	// If "*" is present, all clients/tools are included, and [] means no clients/tools are included.
 	// Request context filtering takes priority over client config - context can override client exclusions.
-	MCPContextKeyIncludeClients schemas.BifrostContextKey = "mcp-include-clients" // Context key for whitelist client filtering
-	MCPContextKeyIncludeTools   schemas.BifrostContextKey = "mcp-include-tools"   // Context key for whitelist tool filtering (Note: toolName should be in "clientName-toolName" format for individual tools, or "clientName-*" for wildcard)
-	MCPContextKeyExcludeTools   schemas.BifrostContextKey = "mcp-exclude-tools"   // Context key for blocklist tool filtering (supports exact tool names, "clientName-*", and glob patterns like "*-scheduler")
+	MCPContextKeyIncludeClients           schemas.BifrostContextKey = "mcp-include-clients"             // Context key for whitelist client filtering
+	MCPContextKeyIncludeTools             schemas.BifrostContextKey = "mcp-include-tools"             // Context key for whitelist tool filtering (Note: toolName should be in "clientName-toolName" format for individual tools, or "clientName-*" for wildcard)
+	MCPContextKeyExcludeTools             schemas.BifrostContextKey = "mcp-exclude-tools"             // Context key for blocklist tool filtering (supports exact tool names, "clientName-*", and glob patterns like "*-scheduler")
+	MCPContextKeyToolsToAutoExecute       schemas.BifrostContextKey = "mcp-tools-to-auto-execute"     // Context key for agent-level override: these tools will be auto-executable (takes precedence over global)
+	MCPContextKeyToolsToNotAutoExecute    schemas.BifrostContextKey = "mcp-tools-to-not-auto-execute" // Context key for agent-level override: these tools will NOT be auto-executable (takes precedence over global)
 )
 
 // ============================================================================
