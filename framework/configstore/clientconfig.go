@@ -59,6 +59,7 @@ type ClientConfig struct {
 	AsyncJobResultTTL       int                              `json:"async_job_result_ttl"`                // Default TTL for async job results in seconds (default: 3600 = 1 hour)
 	RequiredHeaders         []string                         `json:"required_headers,omitempty"`          // Headers that must be present on every request (case-insensitive)
 	LoggingHeaders          []string                         `json:"logging_headers,omitempty"`           // Headers to capture in log metadata
+	WhitelistedPathPatterns []string                         `json:"whitelisted_path_patterns,omitempty"` // Path patterns to whitelist (e.g., ["api/mnemo/*", "logs/*"]). If set, only paths matching these patterns receive CORS headers. Use glob patterns.
 	ConfigHash              string                           `json:"-"`                                   // Config hash for reconciliation (not serialized)
 }
 
@@ -234,6 +235,19 @@ func (c *ClientConfig) GenerateClientConfigHash() (string, error) {
 			hash.Write([]byte("headerFilterConfig.denylist:"))
 			hash.Write(data)
 		}
+	}
+
+	// Hash WhitelistedPathPatterns (sorted for deterministic hashing)
+	if len(c.WhitelistedPathPatterns) > 0 {
+		sortedPatterns := make([]string, len(c.WhitelistedPathPatterns))
+		copy(sortedPatterns, c.WhitelistedPathPatterns)
+		sort.Strings(sortedPatterns)
+		data, err := sonic.Marshal(sortedPatterns)
+		if err != nil {
+			return "", err
+		}
+		hash.Write([]byte("whitelistedPathPatterns:"))
+		hash.Write(data)
 	}
 
 	return hex.EncodeToString(hash.Sum(nil)), nil

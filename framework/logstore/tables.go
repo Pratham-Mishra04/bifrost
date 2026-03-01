@@ -36,6 +36,7 @@ type SearchFilters struct {
 	Objects           []string   `json:"objects,omitempty"` // For filtering by request type (chat.completion, text.completion, embedding)
 	SelectedKeyIDs    []string   `json:"selected_key_ids,omitempty"`
 	VirtualKeyIDs     []string   `json:"virtual_key_ids,omitempty"`
+	AgentIDs          []string   `json:"agent_ids,omitempty"`
 	RoutingRuleIDs    []string   `json:"routing_rule_ids,omitempty"`
 	RoutingEngineUsed []string   `json:"routing_engine_used,omitempty"` // For filtering by routing engine (routing-rule, governance, loadbalancing)
 	StartTime         *time.Time `json:"start_time,omitempty"`
@@ -90,6 +91,8 @@ type Log struct {
 	SelectedKeyName       string    `gorm:"type:varchar(255)" json:"selected_key_name"`
 	VirtualKeyID          *string   `gorm:"type:varchar(255);index:idx_logs_virtual_key_id" json:"virtual_key_id"`
 	VirtualKeyName        *string   `gorm:"type:varchar(255)" json:"virtual_key_name"`
+	AgentID               *string   `gorm:"type:varchar(255);index:idx_logs_agent_id" json:"agent_id"`
+	AgentName             *string   `gorm:"type:varchar(255)" json:"agent_name"`
 	RoutingEnginesUsedStr *string   `gorm:"type:varchar(255);column:routing_engines_used" json:"-"` // Comma-separated routing engines
 	RoutingRuleID         *string   `gorm:"type:varchar(255);index:idx_logs_routing_rule_id" json:"routing_rule_id"`
 	RoutingRuleName       *string   `gorm:"type:varchar(255)" json:"routing_rule_name"`
@@ -638,6 +641,8 @@ type MCPToolLog struct {
 	ServerLabel    string    `gorm:"type:varchar(255);index:idx_mcp_logs_server_label" json:"server_label,omitempty"` // MCP server that provided the tool
 	VirtualKeyID   *string   `gorm:"type:varchar(255);index:idx_mcp_logs_virtual_key_id" json:"virtual_key_id"`
 	VirtualKeyName *string   `gorm:"type:varchar(255)" json:"virtual_key_name"`
+	AgentID        *string   `gorm:"type:varchar(255);index:idx_mcp_logs_agent_id" json:"agent_id"`
+	AgentName      *string   `gorm:"type:varchar(255)" json:"agent_name"`
 	Arguments      string    `gorm:"type:text" json:"-"`                                                // JSON serialized tool arguments
 	Result         string    `gorm:"type:text" json:"-"`                                                // JSON serialized tool result
 	ErrorDetails   string    `gorm:"type:text" json:"-"`                                                // JSON serialized *schemas.BifrostError
@@ -863,6 +868,7 @@ type MCPToolLogSearchFilters struct {
 	ServerLabels  []string   `json:"server_labels,omitempty"`
 	Status        []string   `json:"status,omitempty"`
 	VirtualKeyIDs []string   `json:"virtual_key_ids,omitempty"`
+	AgentIDs      []string   `json:"agent_ids,omitempty"`
 	LLMRequestIDs []string   `json:"llm_request_ids,omitempty"`
 	StartTime     *time.Time `json:"start_time,omitempty"`
 	EndTime       *time.Time `json:"end_time,omitempty"`

@@ -77,6 +77,8 @@ type LogMessage struct {
 	SelectedKeyName    string                             // Selected key name
 	VirtualKeyID       string                             // Virtual key ID
 	VirtualKeyName     string                             // Virtual key name
+	AgentID            string                             // Agent ID
+	AgentName          string                             // Agent name
 	RoutingEnginesUsed []string                           // List of routing engines used
 	RoutingRuleID      string                             // Routing rule ID
 	RoutingRuleName    string                             // Routing rule name
@@ -492,6 +494,8 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 	selectedKeyName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeySelectedKeyName)
 	virtualKeyID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyID)
 	virtualKeyName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyName)
+	agentID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyAgentID)
+	agentName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyAgentName)
 	routingRuleID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceRoutingRuleID)
 	routingRuleName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceRoutingRuleName)
 	numberOfRetries := bifrost.GetIntFromContext(ctx, schemas.BifrostContextKeyNumberOfRetries)
@@ -520,9 +524,11 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 		logMsg.RequestID = requestID
 		logMsg.SelectedKeyID = selectedKeyID
 		logMsg.VirtualKeyID = virtualKeyID
+		logMsg.AgentID = agentID
 		logMsg.RoutingRuleID = routingRuleID
 		logMsg.SelectedKeyName = selectedKeyName
 		logMsg.VirtualKeyName = virtualKeyName
+		logMsg.AgentName = agentName
 		logMsg.RoutingRuleName = routingRuleName
 		logMsg.NumberOfRetries = numberOfRetries
 		logMsg.RoutingEngineLogs = routingEngineLogs
@@ -563,6 +569,8 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 					logMsg.Latency,
 					logMsg.VirtualKeyID,
 					logMsg.VirtualKeyName,
+					logMsg.AgentID,
+					logMsg.AgentName,
 					logMsg.RoutingRuleID,
 					logMsg.RoutingRuleName,
 					logMsg.NumberOfRetries,
@@ -608,23 +616,25 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 				// Prepare final log data
 				logMsg.Operation = LogOperationStreamUpdate
 				logMsg.StreamResponse = streamResponse
-				processingErr := retryOnNotFound(p.ctx, func() error {
-					return p.updateStreamingLogEntry(
-						p.ctx,
-						logMsg.RequestID,
-						logMsg.SelectedKeyID,
-						logMsg.SelectedKeyName,
-						logMsg.VirtualKeyID,
-						logMsg.VirtualKeyName,
-						logMsg.RoutingRuleID,
-						logMsg.RoutingRuleName,
-						logMsg.NumberOfRetries,
-						logMsg.SemanticCacheDebug,
-						logMsg.RoutingEngineLogs,
-						logMsg.StreamResponse,
-						true,
-					)
-				})
+			processingErr := retryOnNotFound(p.ctx, func() error {
+				return p.updateStreamingLogEntry(
+					p.ctx,
+					logMsg.RequestID,
+					logMsg.SelectedKeyID,
+					logMsg.SelectedKeyName,
+					logMsg.VirtualKeyID,
+					logMsg.VirtualKeyName,
+					logMsg.AgentID,
+					logMsg.AgentName,
+					logMsg.RoutingRuleID,
+					logMsg.RoutingRuleName,
+					logMsg.NumberOfRetries,
+					logMsg.SemanticCacheDebug,
+					logMsg.RoutingEngineLogs,
+					logMsg.StreamResponse,
+					true,
+				)
+			})
 				if processingErr != nil {
 					p.logger.Warn("failed to process stream update for request %s: %v", logMsg.RequestID, processingErr)
 				} else {
@@ -805,6 +815,8 @@ func (p *LoggerPlugin) PostLLMHook(ctx *schemas.BifrostContext, result *schemas.
 					logMsg.Latency,
 					logMsg.VirtualKeyID,
 					logMsg.VirtualKeyName,
+					logMsg.AgentID,
+					logMsg.AgentName,
 					logMsg.RoutingRuleID,
 					logMsg.RoutingRuleName,
 					logMsg.NumberOfRetries,
@@ -931,6 +943,8 @@ func (p *LoggerPlugin) PreMCPHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 	// Get virtual key information from context - using same method as normal LLM logging
 	virtualKeyID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyID)
 	virtualKeyName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyName)
+	agentID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyAgentID)
+	agentName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyAgentName)
 
 	go func() {
 		entry := &logstore.MCPToolLog{
@@ -951,6 +965,13 @@ func (p *LoggerPlugin) PreMCPHook(ctx *schemas.BifrostContext, req *schemas.Bifr
 		}
 		if virtualKeyName != "" {
 			entry.VirtualKeyName = &virtualKeyName
+		}
+
+		if agentID != "" {
+			entry.AgentID = &agentID
+		}
+		if agentName != "" {
+			entry.AgentName = &agentName
 		}
 
 		// Set arguments if content logging is enabled
@@ -1009,6 +1030,8 @@ func (p *LoggerPlugin) PostMCPHook(ctx *schemas.BifrostContext, resp *schemas.Bi
 	// Extract virtual key ID and name from context (set by governance plugin)
 	virtualKeyID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyID)
 	virtualKeyName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyGovernanceVirtualKeyName)
+	agentID := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyAgentID)
+	agentName := bifrost.GetStringFromContext(ctx, schemas.BifrostContextKeyAgentName)
 
 	go func() {
 		updates := make(map[string]interface{})
@@ -1019,6 +1042,14 @@ func (p *LoggerPlugin) PostMCPHook(ctx *schemas.BifrostContext, resp *schemas.Bi
 		}
 		if virtualKeyName != "" {
 			updates["virtual_key_name"] = virtualKeyName
+		}
+
+		// Update agent ID and name if they are set
+		if agentID != "" {
+			updates["agent_id"] = agentID
+		}
+		if agentName != "" {
+			updates["agent_name"] = agentName
 		}
 
 		// Get latency from response ExtraFields
